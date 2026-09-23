@@ -1,24 +1,42 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
-
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
+import { InspectionProvider } from '@/context/InspectionContext';
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+    <InspectionProvider>
+      <StatusBar style="dark" />
+
+      <Stack
+        screenOptions={{
+          headerShown: false,
+        }}
+      >
+        <Stack.Screen name="index" />
+
+        <Stack.Screen name="login" />
+
+        <Stack.Screen name="onboarding" />
+
+        <Stack.Screen name="(tabs)" />
+
+        <Stack.Screen name="place/[id]" />
+
+        <Stack.Screen name="inspection/new" />
+
+        <Stack.Screen name="inspection/checklist" />
+
+        <Stack.Screen name="inspection/summary" />
+
+        <Stack.Screen name="inspection/violations" />
+
+        <Stack.Screen name="inspection/evidence" />
+
+        <Stack.Screen name="reinspection/[id]" />
+
+        <Stack.Screen name="sync" />
       </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    </InspectionProvider>
   );
 }
