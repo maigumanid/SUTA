@@ -16,6 +16,7 @@ import {
 
 import { useInspection } from '@/context/InspectionContext';
 import { saveInspectionLocally } from '@/storage/inspectionStorage';
+import { completeReinspection } from '@/storage/reinspectionStorage';
 
 export default function InspectionSummaryScreen() {
   const { tour } = useLocalSearchParams<{
@@ -161,6 +162,35 @@ export default function InspectionSummaryScreen() {
     }
   };
 
+  const getInspectionResult = () => {
+    switch (draftInspection?.result) {
+      case 'compliant':
+        return 'Compliant';
+      case 'non_compliant':
+        return 'Non-Compliant';
+      case 'for_reinspection':
+        return 'For Reinspection';
+      default:
+        return 'Not selected';
+    }
+  };
+
+  const getFindingCategory = (
+    category:
+      | 'safe_water_supply'
+      | 'sanitation'
+      | 'other'
+  ) => {
+    switch (category) {
+      case 'safe_water_supply':
+        return 'Safe Water Supply';
+      case 'sanitation':
+        return 'Sanitation';
+      default:
+        return 'Other';
+    }
+  };
+
   const handleSave = async () => {
     console.log('SAVE BUTTON PRESSED');
 
@@ -193,6 +223,13 @@ export default function InspectionSummaryScreen() {
           draftInspection
         );
 
+      if (draftInspection.reinspectionId) {
+        await completeReinspection(
+          draftInspection.reinspectionId,
+          saved.id
+        );
+      }
+
       console.log(
         'SAVED INSPECTION:',
         saved
@@ -210,6 +247,16 @@ export default function InspectionSummaryScreen() {
             text: 'OK',
             onPress: () => {
               clearDraftInspection();
+
+              if (
+                draftInspection.result ===
+                'for_reinspection'
+              ) {
+                router.replace(
+                  `/reinspection/${saved.id}`
+                );
+                return;
+              }
 
               router.replace('/sync');
             },
@@ -278,6 +325,28 @@ export default function InspectionSummaryScreen() {
 
   const sanitation =
     draftInspection.sanitationFacility;
+
+  const location =
+    draftInspection.inspectionLocation;
+
+  const locationStatus = (() => {
+    if (location) {
+      return `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
+    }
+
+    switch (
+      draftInspection.locationCaptureStatus
+    ) {
+      case 'permission_denied':
+        return 'Not captured — permission denied';
+      case 'services_disabled':
+        return 'Not captured — location services disabled';
+      case 'unavailable':
+        return 'Not captured — location unavailable';
+      default:
+        return 'Not captured';
+    }
+  })();
 
   return (
     <View style={styles.screen}>
@@ -351,6 +420,45 @@ export default function InspectionSummaryScreen() {
               draftInspection.placeId ||
               'Not recorded'
             }
+          />
+
+          <ReviewRow
+            label="Inspection Type"
+            value={
+              draftInspection.reinspectionId
+                ? 'Reinspection'
+                : 'Initial Inspection'
+            }
+          />
+
+          {draftInspection.reinspectionOfInspectionId && (
+            <ReviewRow
+              label="Original Inspection ID"
+              value={
+                draftInspection.reinspectionOfInspectionId
+              }
+            />
+          )}
+
+          <ReviewRow
+            label="Inspection Location"
+            value={locationStatus}
+          />
+
+          <ReviewRow
+            label="Location Accuracy"
+            value={
+              location?.accuracy !== undefined
+                ? `${Math.round(location.accuracy)} meters`
+                : 'Not available'
+            }
+          />
+
+          <ReviewRow
+            label="Location Captured"
+            value={formatDate(
+              location?.capturedAt
+            )}
             last
           />
         </Section>
@@ -500,6 +608,39 @@ export default function InspectionSummaryScreen() {
             )}
             last
           />
+        </Section>
+
+        <Section
+          icon="alert-circle-outline"
+          title="Inspection Result & Findings"
+        >
+          <ReviewRow
+            label="Result"
+            value={getInspectionResult()}
+            last={
+              draftInspection.findings.length === 0
+            }
+          />
+
+          {draftInspection.findings.length === 0 ? (
+            <Text style={styles.notRecorded}>
+              No findings recorded.
+            </Text>
+          ) : (
+            draftInspection.findings.map(
+              (finding, index) => (
+                <ReviewRow
+                  key={finding.id}
+                  label={`Finding ${index + 1} — ${getFindingCategory(finding.category)}`}
+                  value={`${finding.details}\nEvidence: ${finding.evidence.length} ${finding.evidence.length === 1 ? 'photo' : 'photos'}`}
+                  last={
+                    index ===
+                    draftInspection.findings.length - 1
+                  }
+                />
+              )
+            )
+          )}
         </Section>
 
         <Section

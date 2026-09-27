@@ -1,6 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import {
+  Alert,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,52 +13,36 @@ import {
 
 import AppButton from '@/components/common/AppButton';
 import { COLORS, RADIUS, SPACING } from '@/constants/theme';
-import { Place } from '@/types/place';
-
-const SAMPLE_PLACES: Place[] = [
-  {
-    id: '1',
-    name: 'Dela Cruz Household',
-    representativeName: 'Juan Dela Cruz',
-    address: 'Purok 1',
-    purok: 'Purok 1',
-    placeType: 'Household / Residence',
-    status: 'Not Inspected',
-    riskLevel: 'Low',
-  },
-  {
-    id: '2',
-    name: 'Santos Household',
-    representativeName: 'Maria Santos',
-    address: 'Purok 2',
-    purok: 'Purok 2',
-    placeType: 'Household / Residence',
-    status: 'For Reinspection',
-    riskLevel: 'High',
-    lastInspectionDate: 'September 10, 2026',
-  },
-  {
-    id: '3',
-    name: 'Sample Food House',
-    representativeName: 'Pedro Reyes',
-    address: 'Purok 3',
-    purok: 'Purok 3',
-    placeType: 'Food Establishment',
-    status: 'Compliant',
-    riskLevel: 'Low',
-    lastInspectionDate: 'September 15, 2026',
-  },
-];
+import { createInitialHouseholdInspection } from '@/constants/householdInspection';
+import { useInspection } from '@/context/InspectionContext';
+import { getPlaceById } from '@/data/places';
+import {
+  captureInspectionLocation,
+  InspectionLocationResult,
+} from '@/services/locationService';
 
 export default function NewInspectionScreen() {
-  const { placeId, tour } = useLocalSearchParams<{
+  const {
+    placeId,
+    tour,
+    reinspectionId,
+    originalInspectionId,
+  } = useLocalSearchParams<{
     placeId?: string;
     tour?: string;
+    reinspectionId?: string;
+    originalInspectionId?: string;
   }>();
 
-  const place = SAMPLE_PLACES.find(
-    (item) => item.id === placeId
-  );
+  const { setDraftInspection } =
+    useInspection();
+
+  const [isCapturingLocation, setIsCapturingLocation] =
+    useState(false);
+
+  const place = placeId
+    ? getPlaceById(placeId)
+    : undefined;
 
   if (!place) {
     return (
@@ -87,11 +74,86 @@ export default function NewInspectionScreen() {
   const isHousehold =
     place.placeType === 'Household / Residence';
 
-  const startChecklist = () => {
-    router.push(
-      `/inspection/checklist?placeId=${place.id}${
-        tour === 'true' ? '&tour=true' : ''
-      }`
+  const openChecklist = (
+    result: InspectionLocationResult
+  ) => {
+    setDraftInspection(
+      createInitialHouseholdInspection(place.id, {
+        inspectionLocation: result.location,
+        locationCaptureStatus: result.status,
+        locationCaptureAttemptedAt:
+          result.attemptedAt,
+        reinspectionId,
+        reinspectionOfInspectionId:
+          originalInspectionId,
+      })
+    );
+
+    router.push({
+      pathname: '/inspection/checklist',
+      params: {
+        placeId: place.id,
+        ...(tour === 'true'
+          ? { tour: 'true' }
+          : {}),
+      },
+    });
+  };
+
+  const startChecklist = async () => {
+    if (isCapturingLocation) {
+      return;
+    }
+
+    setIsCapturingLocation(true);
+
+    const result =
+      await captureInspectionLocation();
+
+    setIsCapturingLocation(false);
+
+    if (result.status === 'captured') {
+      openChecklist(result);
+      return;
+    }
+
+    const messages = {
+      permission_denied:
+        'Location permission was denied. SUTA will not create or substitute coordinates.',
+      services_disabled:
+        'Location services appear to be disabled. Turn them on and retry to capture the inspection location.',
+      unavailable:
+        'The current location could not be obtained. This may be a temporary GPS or device error.',
+    } as const;
+
+    const shouldOpenSettings =
+      result.status === 'services_disabled' ||
+      (result.status === 'permission_denied' &&
+        result.canAskAgain === false);
+
+    Alert.alert(
+      'Location Not Captured',
+      `${messages[result.status]} You may retry or continue with the inspection without a recorded location.`,
+      [
+        {
+          text: 'Continue Without Location',
+          style: 'cancel',
+          onPress: () => openChecklist(result),
+        },
+        {
+          text: shouldOpenSettings
+            ? 'Open Settings'
+            : 'Retry',
+          onPress: () => {
+            if (shouldOpenSettings) {
+              void Linking.openSettings();
+              return;
+            }
+
+            void startChecklist();
+          },
+        },
+      ]
     );
   };
 
@@ -114,7 +176,9 @@ export default function NewInspectionScreen() {
 
         <View style={styles.headerText}>
           <Text style={styles.headerTitle}>
-            New Inspection
+            {reinspectionId
+              ? 'Reinspection'
+              : 'New Inspection'}
           </Text>
 
           <Text style={styles.headerSubtitle}>
@@ -138,7 +202,9 @@ export default function NewInspectionScreen() {
 
           <View style={styles.noticeContent}>
             <Text style={styles.noticeTitle}>
-              Sanitary Inspection
+              {reinspectionId
+                ? 'Follow-up Sanitary Inspection'
+                : 'Sanitary Inspection'}
             </Text>
 
             <Text style={styles.noticeText}>
@@ -214,6 +280,11 @@ export default function NewInspectionScreen() {
             />
 
             <ReminderItem
+              icon="navigate-outline"
+              text="SUTA will request permission and capture the current inspection location."
+            />
+
+            <ReminderItem
               icon="camera-outline"
               text="Photo evidence can be added when violations are found."
             />
@@ -228,7 +299,15 @@ export default function NewInspectionScreen() {
         <AppButton
           title="Begin Inspection Checklist"
           onPress={startChecklist}
+          disabled={!isHousehold}
+          loading={isCapturingLocation}
         />
+
+        {!isHousehold && (
+          <Text style={styles.developmentNote}>
+            The official inspection form for this place type is not yet available. Select a household to use the current checklist.
+          </Text>
+        )}
 
         <Text style={styles.developmentNote}>
           Inspection records are using sample data during development.

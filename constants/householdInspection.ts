@@ -1,11 +1,32 @@
-import { HouseholdInspection } from '@/types/householdInspection';
+import {
+  HouseholdInspection,
+  InspectionLocation,
+  LocationCaptureStatus,
+} from '@/types/householdInspection';
 
 export const createInitialHouseholdInspection = (
-  placeId: string
+  placeId: string,
+  options?: {
+    inspectionLocation?: InspectionLocation;
+    locationCaptureStatus?: LocationCaptureStatus;
+    locationCaptureAttemptedAt?: string;
+    reinspectionId?: string;
+    reinspectionOfInspectionId?: string;
+  }
 ): HouseholdInspection => {
   return {
     placeId,
     inspectionDate: new Date().toISOString(),
+    inspectionLocation: options?.inspectionLocation,
+    locationCaptureStatus:
+      options?.locationCaptureStatus ?? 'not_attempted',
+    locationCaptureAttemptedAt:
+      options?.locationCaptureAttemptedAt,
+    result: undefined,
+    findings: [],
+    reinspectionId: options?.reinspectionId,
+    reinspectionOfInspectionId:
+      options?.reinspectionOfInspectionId,
 
     safeWaterSupply: {
       waterSourceType: undefined,

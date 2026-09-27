@@ -6,6 +6,46 @@ export type WaterSourceType =
 
 export type BinaryResult = 1 | 0;
 
+export type InspectionLocation = {
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+  capturedAt: string;
+};
+
+export type LocationCaptureStatus =
+  | 'not_attempted'
+  | 'captured'
+  | 'permission_denied'
+  | 'services_disabled'
+  | 'unavailable';
+
+export type InspectionResult =
+  | 'compliant'
+  | 'non_compliant'
+  | 'for_reinspection';
+
+export type FindingCategory =
+  | 'safe_water_supply'
+  | 'sanitation'
+  | 'other';
+
+export type EvidenceAttachment = {
+  id: string;
+  uri: string;
+  source: 'camera' | 'library';
+  createdAt: string;
+  fileName?: string;
+  mimeType?: string;
+};
+
+export type InspectionFinding = {
+  id: string;
+  category: FindingCategory;
+  details: string;
+  evidence: EvidenceAttachment[];
+};
+
 export type MicrobialTest = {
   recorded: boolean;
   dateValidationDone?: string;
@@ -65,6 +105,13 @@ export type HouseholdInspection = {
   id?: string;
   placeId: string;
   inspectionDate: string;
+  inspectionLocation?: InspectionLocation;
+  locationCaptureStatus: LocationCaptureStatus;
+  locationCaptureAttemptedAt?: string;
+  result?: InspectionResult;
+  findings: InspectionFinding[];
+  reinspectionId?: string;
+  reinspectionOfInspectionId?: string;
 
   safeWaterSupply: SafeWaterSupply;
 

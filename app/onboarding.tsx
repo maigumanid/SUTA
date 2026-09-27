@@ -13,9 +13,12 @@ import {
   RADIUS,
   SPACING,
 } from '@/constants/theme';
+import { setOnboardingComplete } from '@/storage/secureStorage';
 
 export default function OnboardingScreen() {
-  const startTour = () => {
+  const startTour = async () => {
+    await setOnboardingComplete();
+
     router.replace({
       pathname: '/(tabs)/dashboard',
       params: {
@@ -24,7 +27,9 @@ export default function OnboardingScreen() {
     });
   };
 
-  const skipTour = () => {
+  const skipTour = async () => {
+    await setOnboardingComplete();
+
     router.replace('/(tabs)/dashboard');
   };
 

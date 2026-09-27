@@ -1,12 +1,23 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { StyleSheet } from 'react-native';
+import {
+  SafeAreaProvider,
+  SafeAreaView,
+} from 'react-native-safe-area-context';
 
 import { InspectionProvider } from '@/context/InspectionContext';
+import { COLORS } from '@/constants/theme';
 
 export default function RootLayout() {
   return (
-    <InspectionProvider>
-      <StatusBar style="dark" />
+    <SafeAreaProvider>
+      <SafeAreaView
+        edges={['top', 'left', 'right']}
+        style={styles.safeArea}
+      >
+        <InspectionProvider>
+          <StatusBar style="dark" />
 
       <Stack
         screenOptions={{
@@ -36,7 +47,16 @@ export default function RootLayout() {
         <Stack.Screen name="reinspection/[id]" />
 
         <Stack.Screen name="sync" />
-      </Stack>
-    </InspectionProvider>
+          </Stack>
+        </InspectionProvider>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+});

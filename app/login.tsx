@@ -3,8 +3,6 @@ import { router } from 'expo-router';
 import { Controller, useForm } from 'react-hook-form';
 
 import {
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +12,7 @@ import {
 import AppButton from '@/components/common/AppButton';
 import AppInput from '@/components/common/AppInput';
 import ScreenContainer from '@/components/common/ScreenContainer';
+import KeyboardSafeView from '@/components/common/KeyboardSafeView';
 
 import {
   COLORS,
@@ -26,6 +25,7 @@ import {
   LoginFormData,
   loginSchema,
 } from '@/utils/validation';
+import { hasCompletedOnboarding } from '@/storage/secureStorage';
 
 export default function LoginScreen() {
   const {
@@ -41,22 +41,26 @@ export default function LoginScreen() {
     },
   });
 
-  const handleLogin = async (data: LoginFormData) => {
-    console.log('Login data:', data);
-
+  const handleLogin = async (_data: LoginFormData) => {
     // Firebase Authentication will replace this later.
-    router.replace('/onboarding');
+    const onboardingComplete =
+      await hasCompletedOnboarding();
+
+    router.replace(
+      onboardingComplete
+        ? '/(tabs)/dashboard'
+        : '/onboarding'
+    );
   };
 
   return (
     <ScreenContainer>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardSafeView>
         <ScrollView
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          automaticallyAdjustKeyboardInsets
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.brand}>
@@ -134,16 +138,12 @@ export default function LoginScreen() {
             </Text>
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardSafeView>
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-
   content: {
     flexGrow: 1,
     justifyContent: 'center',

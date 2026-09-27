@@ -1,6 +1,5 @@
 import { ReactNode } from 'react';
 import {
-  SafeAreaView,
   StyleSheet,
   View,
 } from 'react-native';
@@ -18,11 +17,11 @@ export default function ScreenContainer({
   children,
 }: ScreenContainerProps) {
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.safeArea}>
       <View style={styles.container}>
         {children}
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 

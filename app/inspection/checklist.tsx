@@ -14,6 +14,7 @@ import {
 
 import { useInspection } from '@/context/InspectionContext';
 import AppButton from '@/components/common/AppButton';
+import KeyboardSafeView from '@/components/common/KeyboardSafeView';
 
 import {
   BinaryField,
@@ -26,6 +27,7 @@ import {
 import SanitationSection from '@/components/inspection/SanitationSection';
 
 import { createInitialHouseholdInspection } from '@/constants/householdInspection';
+import { getPlaceById } from '@/data/places';
 
 import {
   COLORS,
@@ -57,7 +59,14 @@ const { placeId, tour } =
 
 const isTourActive = tour === 'true';
 
-  const { setDraftInspection } =
+  const place = placeId
+    ? getPlaceById(placeId)
+    : undefined;
+
+  const {
+    draftInspection,
+    setDraftInspection,
+  } =
     useInspection();
 
   const scrollRef = useRef<ScrollView>(null);
@@ -67,7 +76,10 @@ const isTourActive = tour === 'true';
 
   const [inspection, setInspection] =
     useState<HouseholdInspection>(() =>
-      createInitialHouseholdInspection(placeId ?? '')
+      draftInspection &&
+      draftInspection.placeId === placeId
+        ? draftInspection
+        : createInitialHouseholdInspection(placeId ?? '')
     );
 
   const [errors, setErrors] =
@@ -229,7 +241,7 @@ const isTourActive = tour === 'true';
     setDraftInspection(inspection);
 
     router.push({
-      pathname: '/inspection/summary',
+      pathname: '/inspection/violations',
       params: {
         ...(isTourActive
           ? { tour: 'true' }
@@ -256,8 +268,39 @@ const isTourActive = tour === 'true';
     router.back();
   };
 
+  if (
+    !place ||
+    place.placeType !== 'Household / Residence'
+  ) {
+    return (
+      <View style={styles.invalidContainer}>
+        <Ionicons
+          name="alert-circle-outline"
+          size={48}
+          color={COLORS.textMuted}
+        />
+
+        <Text style={styles.headerTitle}>
+          Household inspection unavailable
+        </Text>
+
+        <Text style={styles.invalidText}>
+          Select a valid household record before opening this checklist.
+        </Text>
+
+        <AppButton
+          title="Go to Places"
+          onPress={() =>
+            router.replace('/(tabs)/establishments')
+          }
+        />
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.screen}>
+    <KeyboardSafeView>
+      <View style={styles.screen}>
       <View style={styles.header}>
         <Pressable
           onPress={goBack}
@@ -296,6 +339,8 @@ const isTourActive = tour === 'true';
 
       <ScrollView
         ref={scrollRef}
+        automaticallyAdjustKeyboardInsets
+        keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
@@ -888,7 +933,8 @@ const isTourActive = tour === 'true';
           </>
         )}
       </ScrollView>
-    </View>
+      </View>
+    </KeyboardSafeView>
   );
 }
 
@@ -941,6 +987,23 @@ function Section({
 }
 
 const styles = StyleSheet.create({
+  invalidContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.md,
+    padding: SPACING.xl,
+    backgroundColor: COLORS.background,
+  },
+
+  invalidText: {
+    maxWidth: 320,
+    textAlign: 'center',
+    fontSize: 13,
+    lineHeight: 20,
+    color: COLORS.textSecondary,
+  },
+
   screen: {
     flex: 1,
     backgroundColor: COLORS.background,

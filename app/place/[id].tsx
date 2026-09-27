@@ -20,73 +20,7 @@ import TourOverlay, {
 
 import AppButton from '@/components/common/AppButton';
 import { COLORS, RADIUS, SPACING } from '@/constants/theme';
-import { Place } from '@/types/place';
-
-const SAMPLE_PLACES: Place[] = [
-  {
-    id: '1',
-    name: 'Dela Cruz Household',
-    representativeName: 'Juan Dela Cruz',
-    address: 'Purok 1',
-    purok: 'Purok 1',
-    placeType: 'Household / Residence',
-    status: 'Not Inspected',
-    riskLevel: 'Low',
-  },
-  {
-    id: '2',
-    name: 'Santos Household',
-    representativeName: 'Maria Santos',
-    address: 'Purok 2',
-    purok: 'Purok 2',
-    placeType: 'Household / Residence',
-    status: 'For Reinspection',
-    riskLevel: 'High',
-    lastInspectionDate: 'September 10, 2026',
-  },
-  {
-    id: '3',
-    name: 'Sample Food House',
-    representativeName: 'Pedro Reyes',
-    address: 'Purok 3',
-    purok: 'Purok 3',
-    placeType: 'Food Establishment',
-    status: 'Compliant',
-    riskLevel: 'Low',
-    lastInspectionDate: 'September 15, 2026',
-  },
-  {
-    id: '4',
-    name: 'Barangay Elementary School',
-    representativeName: 'Ana Cruz',
-    address: 'Purok 4',
-    purok: 'Purok 4',
-    placeType: 'School',
-    status: 'Not Inspected',
-    riskLevel: 'Medium',
-  },
-  {
-    id: '5',
-    name: 'Barangay Covered Court',
-    representativeName: 'Barangay Representative',
-    address: 'Purok 5',
-    purok: 'Purok 5',
-    placeType: 'Public Facility',
-    status: 'For Reinspection',
-    riskLevel: 'Medium',
-    lastInspectionDate: 'September 18, 2026',
-  },
-  {
-    id: '6',
-    name: 'San Roque Chapel',
-    representativeName: 'Community Representative',
-    address: 'Purok 6',
-    purok: 'Purok 6',
-    placeType: 'Church',
-    status: 'Not Inspected',
-    riskLevel: 'Low',
-  },
-];
+import { getPlaceById } from '@/data/places';
 
 export default function PlaceDetailsScreen() {
   const { id, tour } = useLocalSearchParams<{
@@ -244,9 +178,7 @@ export default function PlaceDetailsScreen() {
     });
   };
 
-  const place = SAMPLE_PLACES.find(
-    (item) => item.id === id
-  );
+  const place = getPlaceById(id);
 
   if (!place) {
     return (
@@ -557,7 +489,14 @@ export default function PlaceDetailsScreen() {
                 },
               });
             }}
+            disabled={!isHousehold}
           />
+
+          {!isHousehold && (
+            <Text style={styles.developmentNote}>
+              The official inspection form for this place type is not yet available. Household inspection data will not be used for it.
+            </Text>
+          )}
         </View>
 
         <Text style={styles.developmentNote}>

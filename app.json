@@ -39,6 +39,20 @@
           }
         }
       ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow SUTA to capture the location where a sanitary inspection is conducted."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow SUTA to select photos as sanitary inspection evidence.",
+          "cameraPermission": "Allow SUTA to take photos as sanitary inspection evidence.",
+          "microphonePermission": false
+        }
+      ],
       "expo-secure-store",
       "@react-native-community/datetimepicker"
     ],
