@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { Controller, useForm } from 'react-hook-form';
 
 import {
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -26,8 +27,11 @@ import {
   loginSchema,
 } from '@/utils/validation';
 import { hasCompletedOnboarding } from '@/storage/secureStorage';
+import { useAuth } from '@/context/AuthContext';
+import { FirebaseError } from 'firebase/app';
 
 export default function LoginScreen() {
+  const { signIn, configurationReady } = useAuth();
   const {
     control,
     handleSubmit,
@@ -41,16 +45,18 @@ export default function LoginScreen() {
     },
   });
 
-  const handleLogin = async (_data: LoginFormData) => {
-    // Firebase Authentication will replace this later.
-    const onboardingComplete =
-      await hasCompletedOnboarding();
+  const handleLogin = async (data: LoginFormData) => {
+    try {
+      await signIn(data.email, data.password);
+      const onboardingComplete = await hasCompletedOnboarding();
 
-    router.replace(
-      onboardingComplete
-        ? '/(tabs)/dashboard'
-        : '/onboarding'
-    );
+      router.replace(
+        onboardingComplete ? '/(tabs)/dashboard' : '/onboarding'
+      );
+    } catch (error) {
+      const message = getLoginErrorMessage(error);
+      Alert.alert('Unable to Sign In', message);
+    }
   };
 
   return (
@@ -124,7 +130,15 @@ export default function LoginScreen() {
               title="Sign In"
               onPress={handleSubmit(handleLogin)}
               loading={isSubmitting}
+              disabled={!configurationReady}
             />
+
+            {!configurationReady && (
+              <Text style={styles.configurationError}>
+                Firebase configuration is missing. Add the project values to
+                .env.local and restart Expo.
+              </Text>
+            )}
           </View>
 
           <View style={styles.securityNotice}>
@@ -208,6 +222,11 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.divider,
   },
 
+  configurationError: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.violation,
+  },
+
   securityTitle: {
     ...TYPOGRAPHY.label,
     color: COLORS.textMuted,
@@ -220,3 +239,23 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xs,
   },
 });
+
+function getLoginErrorMessage(error: unknown) {
+  if (error instanceof FirebaseError) {
+    if (
+      error.code === 'auth/invalid-credential' ||
+      error.code === 'auth/user-not-found' ||
+      error.code === 'auth/wrong-password'
+    ) {
+      return 'The email address or password is incorrect.';
+    }
+
+    if (error.code === 'auth/network-request-failed') {
+      return 'A network connection is required for this sign-in attempt.';
+    }
+  }
+
+  return error instanceof Error
+    ? error.message
+    : 'Sign-in failed. Please try again.';
+}

@@ -27,7 +27,7 @@ import {
 import SanitationSection from '@/components/inspection/SanitationSection';
 
 import { createInitialHouseholdInspection } from '@/constants/householdInspection';
-import { getPlaceById } from '@/data/places';
+import { usePlaces } from '@/context/PlacesContext';
 
 import {
   COLORS,
@@ -51,6 +51,7 @@ import {
 type SectionType = 'water' | 'sanitation';
 
 export default function HouseholdChecklistScreen() {
+  const { getPlaceById } = usePlaces();
 const { placeId, tour } =
   useLocalSearchParams<{
     placeId?: string;

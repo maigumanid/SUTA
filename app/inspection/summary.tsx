@@ -15,10 +15,14 @@ import {
 } from 'react-native';
 
 import { useInspection } from '@/context/InspectionContext';
+import { useAuth } from '@/context/AuthContext';
 import { saveInspectionLocally } from '@/storage/inspectionStorage';
 import { completeReinspection } from '@/storage/reinspectionStorage';
+import { uploadInspection } from '@/services/inspectionService';
+import { uploadReinspection } from '@/services/reinspectionService';
 
 export default function InspectionSummaryScreen() {
+  const { profile } = useAuth();
   const { tour } = useLocalSearchParams<{
     tour?: string;
   }>();
@@ -194,7 +198,7 @@ export default function InspectionSummaryScreen() {
   const handleSave = async () => {
     console.log('SAVE BUTTON PRESSED');
 
-    if (!draftInspection) {
+    if (!draftInspection || !profile) {
       console.log('NO DRAFT INSPECTION');
 
       Alert.alert(
@@ -218,16 +222,36 @@ export default function InspectionSummaryScreen() {
         draftInspection
       );
 
-      const saved =
-        await saveInspectionLocally(
-          draftInspection
-        );
+      const scope = {
+        bsiUid: profile.uid,
+        barangayId: profile.assignedBarangayId,
+      };
+      const saved = await saveInspectionLocally({
+        ...draftInspection,
+        ...scope,
+      });
 
       if (draftInspection.reinspectionId) {
-        await completeReinspection(
+        const completedReinspection = await completeReinspection(
           draftInspection.reinspectionId,
-          saved.id
+          saved.id,
+          scope
         );
+        if (completedReinspection) {
+          try {
+            await uploadReinspection(completedReinspection);
+          } catch (uploadError) {
+            console.error('Reinspection completion upload deferred:', uploadError);
+          }
+        }
+      }
+
+      let synced = true;
+      try {
+        await uploadInspection(saved, scope);
+      } catch (uploadError) {
+        synced = false;
+        console.error('Inspection upload deferred:', uploadError);
       }
 
       console.log(
@@ -241,7 +265,9 @@ export default function InspectionSummaryScreen() {
 
       Alert.alert(
         'Inspection Saved',
-        'The inspection was saved successfully on this device.',
+        synced
+          ? 'The inspection was saved and synchronized.'
+          : 'The inspection was saved on this device and will remain marked for synchronization.',
         [
           {
             text: 'OK',

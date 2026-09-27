@@ -18,9 +18,8 @@ import {
   SPACING,
 } from '@/constants/theme';
 
-import {
-  getPlaceById,
-} from '@/data/places';
+import { usePlaces } from '@/context/PlacesContext';
+import { useAuth } from '@/context/AuthContext';
 
 import {
   getStoredInspections,
@@ -28,6 +27,7 @@ import {
 } from '@/storage/inspectionStorage';
 
 export default function SyncScreen() {
+  const { profile } = useAuth();
   const [inspections, setInspections] =
     useState<StoredInspection[]>([]);
 
@@ -37,10 +37,13 @@ export default function SyncScreen() {
   const [isRefreshing, setIsRefreshing] =
     useState(false);
 
-  const loadInspections = async () => {
+  const loadInspections = useCallback(async () => {
     try {
-      const records =
-        await getStoredInspections();
+      if (!profile) return;
+      const records = await getStoredInspections({
+        bsiUid: profile.uid,
+        barangayId: profile.assignedBarangayId,
+      });
 
       setInspections(records);
     } catch (error) {
@@ -52,12 +55,12 @@ export default function SyncScreen() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  };
+  }, [profile]);
 
   useFocusEffect(
     useCallback(() => {
       loadInspections();
-    }, [])
+    }, [loadInspections])
   );
 
   const refresh = () => {
@@ -306,6 +309,7 @@ function InspectionCard({
 }: {
   inspection: StoredInspection;
 }) {
+  const { getPlaceById } = usePlaces();
   const place =
     getPlaceById(inspection.placeId);
 

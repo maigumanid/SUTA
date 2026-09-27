@@ -15,13 +15,14 @@ import AppButton from '@/components/common/AppButton';
 import { COLORS, RADIUS, SPACING } from '@/constants/theme';
 import { createInitialHouseholdInspection } from '@/constants/householdInspection';
 import { useInspection } from '@/context/InspectionContext';
-import { getPlaceById } from '@/data/places';
+import { usePlaces } from '@/context/PlacesContext';
 import {
   captureInspectionLocation,
   InspectionLocationResult,
 } from '@/services/locationService';
 
 export default function NewInspectionScreen() {
+  const { getPlaceById } = usePlaces();
   const {
     placeId,
     tour,

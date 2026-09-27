@@ -18,6 +18,10 @@ export type RiskLevel = 'Low' | 'Medium' | 'High';
 export type Place = {
   id: string;
 
+  barangayId: string;
+
+  createdByUid?: string;
+
   name: string;
 
   representativeName: string;

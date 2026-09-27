@@ -1,5 +1,5 @@
-import { Directory, File, Paths } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
+import { Platform } from 'react-native';
 
 import { EvidenceAttachment } from '@/types/householdInspection';
 
@@ -11,24 +11,14 @@ export type EvidenceSelectionResult =
   | { status: 'permission_denied'; canAskAgain: boolean }
   | { status: 'error'; message: string };
 
-const evidenceDirectory = new Directory(
-  Paths.document,
-  'inspection-evidence'
-);
-
-function ensureEvidenceDirectory() {
-  if (!evidenceDirectory.exists) {
-    evidenceDirectory.create();
-  }
-}
-
 function getExtension(
   asset: ImagePicker.ImagePickerAsset
 ) {
-  const sourceFile = new File(asset.uri);
+  const fileName = asset.fileName ?? asset.uri.split(/[?#]/)[0];
+  const extensionMatch = fileName.match(/\.[a-zA-Z0-9]+$/);
 
-  if (sourceFile.extension) {
-    return sourceFile.extension;
+  if (extensionMatch) {
+    return extensionMatch[0].toLowerCase();
   }
 
   if (asset.mimeType === 'image/png') {
@@ -42,25 +32,39 @@ function getExtension(
   return '.jpg';
 }
 
-function persistAsset(
+async function persistAsset(
   asset: ImagePicker.ImagePickerAsset,
   source: EvidenceSource
-): EvidenceAttachment {
-  ensureEvidenceDirectory();
-
+): Promise<EvidenceAttachment> {
   const id = `evidence_${Date.now()}_${Math.random()
     .toString(36)
     .slice(2, 8)}`;
-  const destination = new File(
-    evidenceDirectory,
-    `${id}${getExtension(asset)}`
-  );
+  let uri = asset.uri;
 
-  new File(asset.uri).copy(destination);
+  // expo-file-system's File/Directory API is native-only. Import it lazily so
+  // web route discovery never evaluates unsupported filesystem paths.
+  if (Platform.OS !== 'web') {
+    const { Directory, File, Paths } = await import('expo-file-system');
+    const evidenceDirectory = new Directory(
+      Paths.document,
+      'inspection-evidence'
+    );
+
+    if (!evidenceDirectory.exists) {
+      evidenceDirectory.create();
+    }
+
+    const destination = new File(
+      evidenceDirectory,
+      `${id}${getExtension(asset)}`
+    );
+    new File(asset.uri).copy(destination);
+    uri = destination.uri;
+  }
 
   return {
     id,
-    uri: destination.uri,
+    uri,
     source,
     createdAt: new Date().toISOString(),
     ...(asset.fileName
@@ -110,7 +114,7 @@ export async function selectEvidencePhoto(
 
     return {
       status: 'attached',
-      attachment: persistAsset(
+      attachment: await persistAsset(
         result.assets[0],
         source
       ),
@@ -128,8 +132,13 @@ export async function selectEvidencePhoto(
   }
 }
 
-export function deleteEvidencePhoto(uri: string) {
+export async function deleteEvidencePhoto(uri: string) {
+  if (Platform.OS === 'web') {
+    return;
+  }
+
   try {
+    const { File } = await import('expo-file-system');
     const file = new File(uri);
 
     if (file.exists) {

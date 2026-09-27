@@ -103,6 +103,8 @@ export type SanitationFacility = {
 
 export type HouseholdInspection = {
   id?: string;
+  bsiUid?: string;
+  barangayId?: string;
   placeId: string;
   inspectionDate: string;
   inspectionLocation?: InspectionLocation;

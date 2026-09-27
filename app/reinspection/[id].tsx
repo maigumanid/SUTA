@@ -20,7 +20,8 @@ import {
 
 import AppButton from '@/components/common/AppButton';
 import { COLORS, RADIUS, SPACING } from '@/constants/theme';
-import { getPlaceById } from '@/data/places';
+import { usePlaces } from '@/context/PlacesContext';
+import { useAuth } from '@/context/AuthContext';
 import {
   getStoredInspectionById,
   getStoredInspections,
@@ -32,8 +33,11 @@ import {
   ReinspectionRecord,
   saveReinspectionSchedule,
 } from '@/storage/reinspectionStorage';
+import { uploadReinspection } from '@/services/reinspectionService';
 
 export default function ReinspectionScreen() {
+  const { getPlaceById } = usePlaces();
+  const { profile } = useAuth();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [source, setSource] =
     useState<StoredInspection | null>(null);
@@ -51,25 +55,33 @@ export default function ReinspectionScreen() {
     useState(false);
 
   const load = useCallback(async () => {
+    if (!profile) return;
     setIsLoading(true);
 
-    let schedule = await getReinspectionById(id);
+    const scope = {
+      bsiUid: profile.uid,
+      barangayId: profile.assignedBarangayId,
+    };
+
+    let schedule = await getReinspectionById(id, scope);
     let original = schedule
       ? await getStoredInspectionById(
-          schedule.originalInspectionId
+          schedule.originalInspectionId,
+          scope
         )
-      : await getStoredInspectionById(id);
+      : await getStoredInspectionById(id, scope);
 
     if (!schedule && original) {
       schedule =
         await getReinspectionForInspection(
-          original.id
+          original.id,
+          scope
         );
     }
 
     if (!original) {
       const inspections =
-        await getStoredInspections();
+        await getStoredInspections(scope);
       original =
         inspections.find(
           (inspection) =>
@@ -81,7 +93,8 @@ export default function ReinspectionScreen() {
       if (original) {
         schedule =
           await getReinspectionForInspection(
-            original.id
+            original.id,
+            scope
           );
       }
     }
@@ -97,7 +110,7 @@ export default function ReinspectionScreen() {
     }
 
     setIsLoading(false);
-  }, [id]);
+  }, [id, profile]);
 
   useFocusEffect(
     useCallback(() => {
@@ -121,7 +134,7 @@ export default function ReinspectionScreen() {
   };
 
   const saveSchedule = async () => {
-    if (!source || !hasChosenDate) {
+    if (!source || !hasChosenDate || !profile) {
       return;
     }
 
@@ -129,10 +142,17 @@ export default function ReinspectionScreen() {
 
     try {
       const saved = await saveReinspectionSchedule({
+        bsiUid: profile.uid,
+        barangayId: profile.assignedBarangayId,
         originalInspectionId: source.id,
         placeId: source.placeId,
         scheduledDate: selectedDate.toISOString(),
       });
+      try {
+        await uploadReinspection(saved);
+      } catch (uploadError) {
+        console.error('Reinspection upload deferred:', uploadError);
+      }
       setRecord(saved);
       Alert.alert(
         'Reinspection Scheduled',

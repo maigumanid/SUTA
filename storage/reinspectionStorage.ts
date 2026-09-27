@@ -1,11 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const REINSPECTIONS_KEY = 'suta_reinspections';
+import { InspectionScope } from '@/storage/inspectionStorage';
+
+function reinspectionsKey(scope: InspectionScope) {
+  return `suta_reinspections:${scope.bsiUid}:${scope.barangayId}`;
+}
 
 export type ReinspectionStatus = 'pending' | 'completed';
 
 export type ReinspectionRecord = {
   id: string;
+  bsiUid: string;
+  barangayId: string;
   originalInspectionId: string;
   placeId: string;
   scheduledDate: string;
@@ -15,12 +21,12 @@ export type ReinspectionRecord = {
   completedInspectionId?: string;
 };
 
-export async function getReinspections(): Promise<
+export async function getReinspections(scope: InspectionScope): Promise<
   ReinspectionRecord[]
 > {
   try {
     const stored = await AsyncStorage.getItem(
-      REINSPECTIONS_KEY
+      reinspectionsKey(scope)
     );
     const parsed = stored ? JSON.parse(stored) : [];
 
@@ -34,16 +40,18 @@ export async function getReinspections(): Promise<
 }
 
 export async function getReinspectionById(
-  id: string
+  id: string,
+  scope: InspectionScope
 ) {
-  const records = await getReinspections();
+  const records = await getReinspections(scope);
   return records.find((record) => record.id === id);
 }
 
 export async function getReinspectionForInspection(
-  inspectionId: string
+  inspectionId: string,
+  scope: InspectionScope
 ) {
-  const records = await getReinspections();
+  const records = await getReinspections(scope);
   return records.find(
     (record) =>
       record.originalInspectionId === inspectionId
@@ -51,11 +59,13 @@ export async function getReinspectionForInspection(
 }
 
 export async function saveReinspectionSchedule(input: {
+  bsiUid: string;
+  barangayId: string;
   originalInspectionId: string;
   placeId: string;
   scheduledDate: string;
 }): Promise<ReinspectionRecord> {
-  const records = await getReinspections();
+  const records = await getReinspections(input);
   const existing = records.find(
     (record) =>
       record.originalInspectionId ===
@@ -81,7 +91,7 @@ export async function saveReinspectionSchedule(input: {
     : [record, ...records];
 
   await AsyncStorage.setItem(
-    REINSPECTIONS_KEY,
+    reinspectionsKey(input),
     JSON.stringify(next)
   );
   return record;
@@ -89,9 +99,10 @@ export async function saveReinspectionSchedule(input: {
 
 export async function completeReinspection(
   reinspectionId: string,
-  completedInspectionId: string
-) {
-  const records = await getReinspections();
+  completedInspectionId: string,
+  scope: InspectionScope
+): Promise<ReinspectionRecord | undefined> {
+  const records = await getReinspections(scope);
   const next = records.map((record) =>
     record.id === reinspectionId
       ? {
@@ -104,7 +115,9 @@ export async function completeReinspection(
   );
 
   await AsyncStorage.setItem(
-    REINSPECTIONS_KEY,
+    reinspectionsKey(scope),
     JSON.stringify(next)
   );
+
+  return next.find((record) => record.id === reinspectionId);
 }

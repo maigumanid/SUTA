@@ -31,8 +31,22 @@ import {
   COLORS,
   SPACING,
 } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
+import { usePlaces } from '@/context/PlacesContext';
+import {
+  getStoredInspections,
+  StoredInspection,
+} from '@/storage/inspectionStorage';
+import {
+  getReinspections,
+  ReinspectionRecord,
+} from '@/storage/reinspectionStorage';
 
 export default function DashboardScreen() {
+  const { profile } = useAuth();
+  const { getPlaceById } = usePlaces();
+  const [inspections, setInspections] = useState<StoredInspection[]>([]);
+  const [reinspections, setReinspections] = useState<ReinspectionRecord[]>([]);
   const { tour } = useLocalSearchParams<{
     tour?: string;
   }>();
@@ -84,11 +98,33 @@ export default function DashboardScreen() {
     useCallback(() => {
       setIsScreenFocused(true);
 
+      if (profile) {
+        const scope = {
+          bsiUid: profile.uid,
+          barangayId: profile.assignedBarangayId,
+        };
+        void Promise.all([
+          getStoredInspections(scope),
+          getReinspections(scope),
+        ]).then(([nextInspections, nextReinspections]) => {
+          setInspections(nextInspections);
+          setReinspections(nextReinspections);
+        });
+      }
+
       return () => {
         setIsScreenFocused(false);
         setTourTarget(null);
       };
-    }, [])
+    }, [profile])
+  );
+
+  const today = new Date().toISOString().slice(0, 10);
+  const inspectionsToday = inspections.filter(
+    (inspection) => inspection.inspectionDate.slice(0, 10) === today
+  ).length;
+  const pendingReinspections = reinspections.filter(
+    (reinspection) => reinspection.status === 'pending'
   );
 
   const tourSteps = [
@@ -255,7 +291,7 @@ export default function DashboardScreen() {
       >
         <View>
           <Text style={styles.greeting}>
-            Good day, Inspector
+            Good day, {profile?.name ?? 'Inspector'}
           </Text>
 
           <Text style={styles.subtitle}>
@@ -275,12 +311,12 @@ export default function DashboardScreen() {
           }}
         >
           <MetricCard
-            value={4}
+            value={inspectionsToday}
             label="Inspections Today"
           />
 
           <MetricCard
-            value={2}
+            value={pendingReinspections.length}
             label="For Reinspection"
           />
         </View>
@@ -376,37 +412,33 @@ export default function DashboardScreen() {
             </Text>
 
             <Text style={styles.count}>
-              2 pending
+              {pendingReinspections.length} pending
             </Text>
           </View>
 
           <View style={styles.list}>
-            <ReinspectionCard
-              establishmentName="Sample Food House"
-              dueDate="Sep 25, 2026"
-              onPress={() =>
-                router.push(
-                  '/reinspection/1'
-                )
-              }
-            />
-
-            <ReinspectionCard
-              establishmentName="Sample Store"
-              dueDate="Sep 27, 2026"
-              onPress={() =>
-                router.push(
-                  '/reinspection/2'
-                )
-              }
-            />
+            {pendingReinspections.length === 0 ? (
+              <Text style={styles.sectionDescription}>
+                No pending reinspections for this barangay.
+              </Text>
+            ) : (
+              pendingReinspections.slice(0, 5).map((record) => (
+                <ReinspectionCard
+                  key={record.id}
+                  establishmentName={
+                    getPlaceById(record.placeId)?.name ?? `Place ${record.placeId}`
+                  }
+                  dueDate={new Date(record.scheduledDate).toLocaleDateString(
+                    'en-PH',
+                    { month: 'short', day: 'numeric', year: 'numeric' }
+                  )}
+                  onPress={() => router.push(`/reinspection/${record.id}`)}
+                />
+              ))
+            )}
           </View>
         </View>
 
-        <Text style={styles.demoNote}>
-          Dashboard data is currently for
-          development and testing.
-        </Text>
       </ScrollView>
 
       <TourOverlay

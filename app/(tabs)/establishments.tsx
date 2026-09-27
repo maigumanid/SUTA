@@ -35,7 +35,8 @@ import {
   Place,
   PlaceType,
 } from '@/types/place';
-import { SAMPLE_PLACES } from '@/data/places';
+import { usePlaces } from '@/context/PlacesContext';
+import { useAuth } from '@/context/AuthContext';
 
 const PLACE_TYPES: ('All' | PlaceType)[] = [
   'All',
@@ -49,6 +50,8 @@ const PLACE_TYPES: ('All' | PlaceType)[] = [
 ];
 
 export default function EstablishmentsScreen() {
+  const { places, isLoading, error } = usePlaces();
+  const { profile } = useAuth();
 
   const { tour } = useLocalSearchParams<{
     tour?: string;
@@ -191,7 +194,7 @@ export default function EstablishmentsScreen() {
   const filteredPlaces = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    return SAMPLE_PLACES.filter((place) => {
+    return places.filter((place) => {
       const matchesSearch =
         place.name
           .toLowerCase()
@@ -209,7 +212,7 @@ export default function EstablishmentsScreen() {
 
       return matchesSearch && matchesType;
     });
-  }, [search, selectedType]);
+  }, [places, search, selectedType]);
 
   const renderPlace = ({
     item,
@@ -276,7 +279,7 @@ export default function EstablishmentsScreen() {
                 </Text>
 
                 <Text style={styles.subtitle}>
-                  Households and other places in your assigned barangay
+                  {profile?.assignedBarangay ?? 'Assigned barangay'}
                 </Text>
               </View>
             </View>
@@ -395,11 +398,13 @@ export default function EstablishmentsScreen() {
             </View>
 
             <Text style={styles.emptyTitle}>
-              No places found
+              {isLoading ? 'Loading places...' : 'No places found'}
             </Text>
 
             <Text style={styles.emptyText}>
-              Try changing your search or place type.
+              {error
+                ? 'Places could not be refreshed. Check your connection and Firebase access.'
+                : 'Try changing your search or place type.'}
             </Text>
           </View>
         }

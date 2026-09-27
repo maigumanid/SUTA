@@ -20,9 +20,10 @@ import TourOverlay, {
 
 import AppButton from '@/components/common/AppButton';
 import { COLORS, RADIUS, SPACING } from '@/constants/theme';
-import { getPlaceById } from '@/data/places';
+import { usePlaces } from '@/context/PlacesContext';
 
 export default function PlaceDetailsScreen() {
+  const { getPlaceById, isLoading } = usePlaces();
   const { id, tour } = useLocalSearchParams<{
     id: string;
     tour?: string;
@@ -190,7 +191,7 @@ export default function PlaceDetailsScreen() {
         />
 
         <Text style={styles.notFoundTitle}>
-          Place not found
+          {isLoading ? 'Loading place...' : 'Place not found'}
         </Text>
 
         <AppButton
@@ -499,9 +500,6 @@ export default function PlaceDetailsScreen() {
           )}
         </View>
 
-        <Text style={styles.developmentNote}>
-          Sample data is being used during development.
-        </Text>
       </ScrollView>
 
       <TourOverlay

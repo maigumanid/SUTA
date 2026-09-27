@@ -2,8 +2,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { HouseholdInspection } from '@/types/householdInspection';
 
-const INSPECTIONS_KEY =
-  'suta_household_inspections';
+export type InspectionScope = {
+  bsiUid: string;
+  barangayId: string;
+};
+
+function inspectionsKey(scope: InspectionScope) {
+  return `suta_household_inspections:${scope.bsiUid}:${scope.barangayId}`;
+}
 
 export type InspectionSyncStatus =
   | 'pending'
@@ -13,6 +19,8 @@ export type InspectionSyncStatus =
 export type StoredInspection =
   HouseholdInspection & {
     id: string;
+    bsiUid: string;
+    barangayId: string;
     savedAt: string;
     syncStatus: InspectionSyncStatus;
   };
@@ -23,13 +31,13 @@ function createInspectionId() {
     .substring(2, 8)}`;
 }
 
-export async function getStoredInspections(): Promise<
+export async function getStoredInspections(scope: InspectionScope): Promise<
   StoredInspection[]
 > {
   try {
     const data =
       await AsyncStorage.getItem(
-        INSPECTIONS_KEY
+        inspectionsKey(scope)
       );
 
     if (!data) {
@@ -54,11 +62,11 @@ export async function getStoredInspections(): Promise<
 }
 
 export async function saveInspectionLocally(
-  inspection: HouseholdInspection
+  inspection: HouseholdInspection & InspectionScope
 ): Promise<StoredInspection> {
   try {
     const inspections =
-      await getStoredInspections();
+      await getStoredInspections(inspection);
 
     const now = new Date();
 
@@ -81,7 +89,7 @@ export async function saveInspectionLocally(
     ];
 
     await AsyncStorage.setItem(
-      INSPECTIONS_KEY,
+      inspectionsKey(inspection),
       JSON.stringify(updatedInspections)
     );
 
@@ -97,10 +105,11 @@ export async function saveInspectionLocally(
 }
 
 export async function getStoredInspectionById(
-  inspectionId: string
+  inspectionId: string,
+  scope: InspectionScope
 ): Promise<StoredInspection | null> {
   const inspections =
-    await getStoredInspections();
+    await getStoredInspections(scope);
 
   return (
     inspections.find(
@@ -110,11 +119,11 @@ export async function getStoredInspectionById(
   );
 }
 
-export async function getPendingInspections(): Promise<
+export async function getPendingInspections(scope: InspectionScope): Promise<
   StoredInspection[]
 > {
   const inspections =
-    await getStoredInspections();
+    await getStoredInspections(scope);
 
   return inspections.filter(
     (inspection) =>
@@ -125,10 +134,11 @@ export async function getPendingInspections(): Promise<
 
 export async function updateInspectionSyncStatus(
   inspectionId: string,
-  status: InspectionSyncStatus
+  status: InspectionSyncStatus,
+  scope: InspectionScope
 ): Promise<void> {
   const inspections =
-    await getStoredInspections();
+    await getStoredInspections(scope);
 
   const updatedInspections =
     inspections.map((inspection) => {
@@ -145,16 +155,17 @@ export async function updateInspectionSyncStatus(
     });
 
   await AsyncStorage.setItem(
-    INSPECTIONS_KEY,
+    inspectionsKey(scope),
     JSON.stringify(updatedInspections)
   );
 }
 
 export async function deleteStoredInspection(
-  inspectionId: string
+  inspectionId: string,
+  scope: InspectionScope
 ): Promise<void> {
   const inspections =
-    await getStoredInspections();
+    await getStoredInspections(scope);
 
   const updatedInspections =
     inspections.filter(
@@ -163,13 +174,13 @@ export async function deleteStoredInspection(
     );
 
   await AsyncStorage.setItem(
-    INSPECTIONS_KEY,
+    inspectionsKey(scope),
     JSON.stringify(updatedInspections)
   );
 }
 
-export async function clearStoredInspections(): Promise<void> {
+export async function clearStoredInspections(scope: InspectionScope): Promise<void> {
   await AsyncStorage.removeItem(
-    INSPECTIONS_KEY
+    inspectionsKey(scope)
   );
 }
