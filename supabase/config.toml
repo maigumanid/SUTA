@@ -1,0 +1,7 @@
+project_id = "suta"
+
+[db.seed]
+enabled = false
+
+[experimental.pgdelta]
+enabled = true
