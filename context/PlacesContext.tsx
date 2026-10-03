@@ -1,6 +1,7 @@
 import {
   createContext,
   PropsWithChildren,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -9,8 +10,8 @@ import {
 
 import { useAuth } from '@/context/AuthContext';
 import {
+  fetchAndCachePlaces,
   getCachedPlaces,
-  subscribeToBarangayPlaces,
 } from '@/services/placeService';
 import { Place } from '@/types/place';
 
@@ -18,6 +19,7 @@ type PlacesContextValue = {
   places: Place[];
   isLoading: boolean;
   error: string | null;
+  refreshPlaces: () => Promise<void>;
   getPlaceById: (id: string | undefined) => Place | undefined;
 };
 
@@ -28,6 +30,33 @@ export function PlacesProvider({ children }: PropsWithChildren) {
   const [places, setPlaces] = useState<Place[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const refreshPlaces = useCallback(async () => {
+    if (!profile) {
+      setPlaces([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const nextPlaces = await fetchAndCachePlaces(
+        profile.uid,
+        profile.assignedBarangayId
+      );
+      setPlaces(nextPlaces);
+    } catch (refreshError) {
+      setError(
+        refreshError instanceof Error
+          ? refreshError.message
+          : 'Unable to refresh places.'
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, [profile]);
 
   useEffect(() => {
     if (!profile) {
@@ -40,34 +69,42 @@ export function PlacesProvider({ children }: PropsWithChildren) {
     setIsLoading(true);
     setError(null);
 
-    void getCachedPlaces(profile.uid, profile.assignedBarangayId).then(
-      (cached) => {
-        if (active && cached.length > 0) {
-          setPlaces(cached);
+    void (async () => {
+      const cached = await getCachedPlaces(
+        profile.uid,
+        profile.assignedBarangayId
+      );
+      if (!active) return;
+
+      if (cached.length > 0) {
+        setPlaces(cached);
+        setIsLoading(false);
+      }
+
+      try {
+        const nextPlaces = await fetchAndCachePlaces(
+          profile.uid,
+          profile.assignedBarangayId
+        );
+        if (!active) return;
+        setPlaces(nextPlaces);
+        setError(null);
+      } catch (refreshError) {
+        if (!active) return;
+        setError(
+          refreshError instanceof Error
+            ? refreshError.message
+            : 'Unable to refresh places.'
+        );
+      } finally {
+        if (active) {
           setIsLoading(false);
         }
       }
-    );
-
-    const unsubscribe = subscribeToBarangayPlaces(
-      profile.uid,
-      profile.assignedBarangayId,
-      (nextPlaces) => {
-        if (!active) return;
-        setPlaces(nextPlaces);
-        setIsLoading(false);
-        setError(null);
-      },
-      (subscriptionError) => {
-        if (!active) return;
-        setError(subscriptionError.message);
-        setIsLoading(false);
-      }
-    );
+    })();
 
     return () => {
       active = false;
-      unsubscribe();
     };
   }, [profile]);
 
@@ -76,9 +113,10 @@ export function PlacesProvider({ children }: PropsWithChildren) {
       places,
       isLoading,
       error,
+      refreshPlaces,
       getPlaceById: (id) => places.find((place) => place.id === id),
     }),
-    [error, isLoading, places]
+    [error, isLoading, places, refreshPlaces]
   );
 
   return (

@@ -39,11 +39,25 @@ export type EvidenceAttachment = {
   mimeType?: string;
 };
 
+export type BackendEvidenceAttachment = Omit<
+  EvidenceAttachment,
+  'uri'
+> & {
+  storagePath: string;
+};
+
 export type InspectionFinding = {
   id: string;
   category: FindingCategory;
   details: string;
   evidence: EvidenceAttachment[];
+};
+
+export type BackendInspectionFinding = Omit<
+  InspectionFinding,
+  'evidence'
+> & {
+  evidence: BackendEvidenceAttachment[];
 };
 
 export type MicrobialTest = {

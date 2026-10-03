@@ -55,8 +55,10 @@ function RootNavigator() {
       <Stack.Protected guard={isAuthenticated}>
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="place/new" />
         <Stack.Screen name="place/[id]" />
         <Stack.Screen name="inspection/new" />
+        <Stack.Screen name="inspection/[id]" />
         <Stack.Screen name="inspection/checklist" />
         <Stack.Screen name="inspection/summary" />
         <Stack.Screen name="inspection/violations" />

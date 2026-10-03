@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   Alert,
@@ -85,6 +85,24 @@ const isTourActive = tour === 'true';
 
   const [errors, setErrors] =
     useState<InspectionErrors>({});
+
+  useEffect(() => {
+    setDraftInspection((current) => {
+      if (!current || current.placeId !== inspection.placeId) {
+        return inspection;
+      }
+
+      return {
+        ...inspection,
+        result: current.result,
+        findings: current.findings,
+        remarks: current.remarks,
+        reinspectionId: current.reinspectionId,
+        reinspectionOfInspectionId:
+          current.reinspectionOfInspectionId,
+      };
+    });
+  }, [inspection, setDraftInspection]);
 
   const water = inspection.safeWaterSupply;
 
@@ -225,7 +243,7 @@ const isTourActive = tour === 'true';
     }, 50);
   };
 
-  const continueToReview = () => {
+  const continueToFindingsAndResult = () => {
     const validationErrors =
       validateSanitationSection(inspection);
 
@@ -239,15 +257,29 @@ const isTourActive = tour === 'true';
 
     setErrors({});
 
-    setDraftInspection(inspection);
+    setDraftInspection((current) =>
+      current && current.placeId === inspection.placeId
+        ? {
+            ...inspection,
+            result: current.result,
+            findings: current.findings,
+            remarks: current.remarks,
+            reinspectionId: current.reinspectionId,
+            reinspectionOfInspectionId:
+              current.reinspectionOfInspectionId,
+          }
+        : inspection
+    );
 
-    router.push({
-      pathname: '/inspection/violations',
-      params: {
-        ...(isTourActive
-          ? { tour: 'true' }
-          : {}),
-      },
+    requestAnimationFrame(() => {
+      router.push({
+        pathname: '/inspection/violations',
+        params: {
+          ...(isTourActive
+            ? { tour: 'true' }
+            : {}),
+        },
+      });
     });
   };
 
@@ -867,51 +899,9 @@ const isTourActive = tour === 'true';
               }}
             />
 
-            <View style={styles.remarks}>
-              <View style={styles.remarksHeader}>
-                <Ionicons
-                  name="document-text-outline"
-                  size={21}
-                  color={COLORS.primary}
-                />
-
-                <View style={styles.flex}>
-                  <Text style={styles.remarksTitle}>
-                    Remarks
-                  </Text>
-
-                  <Text style={styles.optionalLabel}>
-                    Optional
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={styles.help}>
-                Add observations or other relevant
-                information from the household visit.
-              </Text>
-
-              <TextInput
-                value={inspection.remarks}
-                onChangeText={(value) =>
-                  setInspection((current) => ({
-                    ...current,
-                    remarks: value,
-                  }))
-                }
-                placeholder="Enter remarks if applicable..."
-                placeholderTextColor={
-                  COLORS.textMuted
-                }
-                multiline
-                textAlignVertical="top"
-                style={styles.remarksInput}
-              />
-            </View>
-
             <AppButton
-              title="Continue to Review"
-              onPress={continueToReview}
+              title="Continue to Findings & Result"
+              onPress={continueToFindingsAndResult}
             />
 
             <Pressable

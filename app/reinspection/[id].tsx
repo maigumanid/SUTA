@@ -34,6 +34,7 @@ import {
   saveReinspectionSchedule,
 } from '@/storage/reinspectionStorage';
 import { uploadReinspection } from '@/services/reinspectionService';
+import { formatLocalDate, formatLocalDateTime } from '@/utils/dateTime';
 
 export default function ReinspectionScreen() {
   const { getPlaceById } = usePlaces();
@@ -187,6 +188,14 @@ export default function ReinspectionScreen() {
     });
   };
 
+  const goBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace('/(tabs)/establishments');
+  };
+
   if (isLoading) {
     return (
       <View style={styles.center}>
@@ -216,8 +225,8 @@ export default function ReinspectionScreen() {
           Save an inspection with a For Reinspection result before scheduling its follow-up.
         </Text>
         <AppButton
-          title="Go Back"
-          onPress={() => router.back()}
+          title="Back to Places"
+          onPress={goBack}
         />
       </View>
     );
@@ -230,7 +239,7 @@ export default function ReinspectionScreen() {
     <View style={styles.screen}>
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={goBack}
           style={styles.backButton}
         >
           <Ionicons
@@ -244,7 +253,11 @@ export default function ReinspectionScreen() {
             Reinspection
           </Text>
           <Text style={styles.secondaryText}>
-            Schedule and conduct a follow-up
+            {isCompleted
+              ? 'Review the completed follow-up'
+              : record
+                ? 'Review or change the follow-up schedule'
+                : 'Schedule the required follow-up'}
           </Text>
         </View>
       </View>
@@ -258,10 +271,10 @@ export default function ReinspectionScreen() {
             PLACE
           </Text>
           <Text style={styles.placeName}>
-            {place?.name ?? `Place ${source.placeId}`}
+            {place?.name ?? 'Place not available'}
           </Text>
           <Text style={styles.secondaryText}>
-            Original inspection: {formatDate(source.inspectionDate)}
+            Original inspection: {formatLocalDateTime(source.inspectionDate)}
           </Text>
           <View
             style={[
@@ -272,11 +285,16 @@ export default function ReinspectionScreen() {
             ]}
           >
             <Text style={styles.statusText}>
-              {isCompleted ? 'Completed' : 'Pending'}
+              {isCompleted
+                ? `Completed ${formatLocalDateTime(record.completedAt)}`
+                : record
+                  ? `Scheduled for ${formatLocalDate(record.scheduledDate)}`
+                  : 'Required - Not yet scheduled'}
             </Text>
           </View>
         </View>
 
+        {!isCompleted && (
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>
             Follow-up Date
@@ -297,7 +315,7 @@ export default function ReinspectionScreen() {
             />
             <Text style={styles.dateText}>
               {hasChosenDate
-                ? formatDate(
+                ? formatLocalDate(
                     selectedDate.toISOString()
                   )
                 : 'Choose reinspection date'}
@@ -317,8 +335,8 @@ export default function ReinspectionScreen() {
             <AppButton
               title={
                 record
-                  ? 'Update Schedule'
-                  : 'Save Schedule'
+                  ? 'Change Schedule'
+                  : 'Schedule Reinspection'
               }
               onPress={saveSchedule}
               disabled={!hasChosenDate}
@@ -326,6 +344,7 @@ export default function ReinspectionScreen() {
             />
           )}
         </View>
+        )}
 
         {record && !isCompleted && (
           <AppButton
@@ -335,32 +354,40 @@ export default function ReinspectionScreen() {
         )}
 
         {isCompleted && (
-          <View style={styles.completedNotice}>
-            <Ionicons
-              name="checkmark-circle"
-              size={23}
-              color={COLORS.compliant}
-            />
-            <Text style={styles.completedText}>
-              This follow-up was completed on {formatDate(record.completedAt)}. The original inspection remains in local history.
-            </Text>
-          </View>
+          <>
+            <View style={styles.completedNotice}>
+              <Ionicons
+                name="checkmark-circle"
+                size={23}
+                color={COLORS.compliant}
+              />
+              <Text style={styles.completedText}>
+                This follow-up was completed on {formatLocalDateTime(record.completedAt)}. The original inspection remains in local history.
+              </Text>
+            </View>
+            {record.completedInspectionId ? (
+              <AppButton
+                title="View Reinspection"
+                onPress={() => {
+                  const completedInspectionId =
+                    record.completedInspectionId;
+
+                  if (!completedInspectionId) {
+                    return;
+                  }
+
+                  router.push({
+                    pathname: '/inspection/[id]',
+                    params: { id: completedInspectionId },
+                  });
+                }}
+              />
+            ) : null}
+          </>
         )}
       </ScrollView>
     </View>
   );
-}
-
-function formatDate(value?: string) {
-  if (!value) {
-    return 'Unknown date';
-  }
-
-  return new Date(value).toLocaleDateString('en-PH', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
 }
 
 const styles = StyleSheet.create({

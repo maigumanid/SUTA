@@ -6,6 +6,7 @@ import {
 } from 'expo-router';
 import {
   ActivityIndicator,
+  BackHandler,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -32,6 +33,15 @@ import {
   getStoredInspectionsForPlace,
   StoredInspection,
 } from '@/storage/inspectionStorage';
+import {
+  getReinspections,
+  type ReinspectionRecord,
+} from '@/storage/reinspectionStorage';
+import { formatLocalDate, formatLocalDateTime } from '@/utils/dateTime';
+import {
+  getInspectionTypeLabel,
+  isLinkedReinspection,
+} from '@/utils/inspectionDisplay';
 
 export default function PlaceDetailsScreen() {
   const { getPlaceById, isLoading } = usePlaces();
@@ -55,6 +65,8 @@ export default function PlaceDetailsScreen() {
     useState(true);
   const [historyError, setHistoryError] =
     useState<string | null>(null);
+  const [reinspection, setReinspection] =
+    useState<ReinspectionRecord | null>(null);
 
   const profileRef = useRef<View>(null);
   const informationRef = useRef<View>(null);
@@ -102,6 +114,7 @@ export default function PlaceDetailsScreen() {
   const loadInspectionHistory = useCallback(async () => {
     if (!profile) {
       setInspectionHistory([]);
+      setReinspection(null);
       setIsHistoryLoading(false);
       return;
     }
@@ -110,12 +123,36 @@ export default function PlaceDetailsScreen() {
     setHistoryError(null);
 
     try {
-      const records = await getStoredInspectionsForPlace(id, {
+      const scope = {
         bsiUid: profile.uid,
         barangayId: profile.assignedBarangayId,
-      });
+      };
+      const [records, reinspectionRecords] = await Promise.all([
+        getStoredInspectionsForPlace(id, scope),
+        getReinspections(scope),
+      ]);
+
+      const latestRequiredInspection = records.find(
+        (inspection) => inspection.result === 'for_reinspection'
+      );
+      const matchingReinspection = latestRequiredInspection
+        ? reinspectionRecords.find(
+            (record) =>
+              record.originalInspectionId === latestRequiredInspection.id
+          ) ?? null
+        : reinspectionRecords
+            .filter(
+              (record) =>
+                record.placeId === id && record.status === 'completed'
+            )
+            .sort(
+              (left, right) =>
+                Date.parse(right.completedAt ?? right.createdAt) -
+                Date.parse(left.completedAt ?? left.createdAt)
+            )[0] ?? null;
 
       setInspectionHistory(records);
+      setReinspection(matchingReinspection);
     } catch (error) {
       console.error(
         'Unable to load inspection history:',
@@ -124,6 +161,7 @@ export default function PlaceDetailsScreen() {
       setHistoryError(
         'Inspection history could not be loaded from this device.'
       );
+      setReinspection(null);
     } finally {
       setIsHistoryLoading(false);
     }
@@ -133,6 +171,32 @@ export default function PlaceDetailsScreen() {
     useCallback(() => {
       void loadInspectionHistory();
     }, [loadInspectionHistory])
+  );
+
+  const goBack = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace('/(tabs)/establishments');
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener(
+        'hardwareBackPress',
+        () => {
+          if (!router.canGoBack()) {
+            router.replace('/(tabs)/establishments');
+            return true;
+          }
+          return false;
+        }
+      );
+
+      return () => subscription.remove();
+    }, [])
   );
 
   const showTourStep = (index: number) => {
@@ -250,7 +314,7 @@ export default function PlaceDetailsScreen() {
 
         <AppButton
           title="Go Back"
-          onPress={() => router.back()}
+          onPress={goBack}
         />
       </View>
     );
@@ -263,7 +327,7 @@ export default function PlaceDetailsScreen() {
     <View style={styles.screen}>
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={goBack}
           style={({ pressed }) => [
             styles.backButton,
             pressed && styles.pressed,
@@ -424,12 +488,142 @@ export default function PlaceDetailsScreen() {
               icon="calendar-outline"
               label="Last Inspection"
               value={
-                place.lastInspectionDate ??
-                'No inspection recorded'
+                formatLocalDateTime(
+                  place.lastInspectionDate,
+                  'No inspection recorded'
+                )
               }
             />
           </View>
         </View>
+
+        {place.status !== 'For Reinspection' &&
+          reinspection?.status !== 'pending' && (
+            <View
+              ref={actionRef}
+              collapsable={false}
+              style={styles.actions}
+              onLayout={(event) => {
+                actionY.current = event.nativeEvent.layout.y;
+              }}
+            >
+              <AppButton
+                title="Start Inspection"
+                onPress={() => {
+                  router.push({
+                    pathname: '/inspection/new',
+                    params: {
+                      placeId: place.id,
+                    },
+                  });
+                }}
+                disabled={!isHousehold}
+              />
+
+              {!isHousehold && (
+                <Text style={styles.developmentNote}>
+                  The official inspection form for this place type is not yet available. Household inspection data will not be used for it.
+                </Text>
+              )}
+            </View>
+          )}
+
+        {(place.status === 'For Reinspection' || reinspection) && (
+          <View>
+            <Text style={styles.sectionTitle}>
+              Reinspection
+            </Text>
+
+            <View style={styles.reinspectionStatusCard}>
+              <View style={styles.reinspectionStatusHeader}>
+                <Ionicons
+                  name={
+                    reinspection?.status === 'completed'
+                      ? 'checkmark-circle-outline'
+                      : 'alert-circle-outline'
+                  }
+                  size={23}
+                  color={
+                    reinspection?.status === 'completed'
+                      ? COLORS.compliant
+                      : COLORS.warning
+                  }
+                />
+
+                <View style={styles.noticeContent}>
+                  <Text style={styles.noticeTitle}>
+                    {!reinspection
+                      ? 'Required'
+                      : reinspection.status === 'completed'
+                        ? 'Completed'
+                        : 'Scheduled'}
+                  </Text>
+
+                  <Text style={styles.noticeText}>
+                    {!reinspection
+                      ? 'Not yet scheduled'
+                      : reinspection.status === 'completed'
+                        ? formatLocalDateTime(reinspection.completedAt)
+                        : `Scheduled for ${formatLocalDate(reinspection.scheduledDate)}`}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.reinspectionActions}>
+                {!reinspection ? (
+                  <AppButton
+                    title="Schedule Reinspection"
+                    onPress={() => router.push(`/reinspection/${place.id}`)}
+                  />
+                ) : reinspection.status === 'pending' ? (
+                  <>
+                    <AppButton
+                      title="Change Schedule"
+                      variant="outline"
+                      onPress={() =>
+                        router.push(`/reinspection/${reinspection.id}`)
+                      }
+                    />
+                    <AppButton
+                      title="Conduct Reinspection"
+                      onPress={() =>
+                        router.push({
+                          pathname: '/inspection/new',
+                          params: {
+                            placeId: reinspection.placeId,
+                            reinspectionId: reinspection.id,
+                            originalInspectionId:
+                              reinspection.originalInspectionId,
+                          },
+                        })
+                      }
+                    />
+                  </>
+                ) : reinspection.completedInspectionId ? (
+                  <AppButton
+                    title="View Reinspection"
+                    variant="outline"
+                    onPress={() => {
+                      const completedInspectionId =
+                        reinspection.completedInspectionId;
+
+                      if (!completedInspectionId) {
+                        return;
+                      }
+
+                      router.push({
+                        pathname: '/inspection/[id]',
+                        params: {
+                          id: completedInspectionId,
+                        },
+                      });
+                    }}
+                  />
+                ) : null}
+              </View>
+            </View>
+          </View>
+        )}
 
         <View>
           <Text style={styles.sectionTitle}>
@@ -510,71 +704,19 @@ export default function PlaceDetailsScreen() {
                       candidate.reinspectionOfInspectionId ===
                       inspection.id
                   )}
+                  inspectionType={getInspectionTypeLabel(
+                    inspection,
+                    inspectionHistory
+                  )}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/inspection/[id]',
+                      params: { id: inspection.id },
+                    })
+                  }
                 />
               ))}
             </View>
-          )}
-        </View>
-
-        {place.status === 'For Reinspection' && (
-          <View style={styles.reinspectionNotice}>
-            <Ionicons
-              name="alert-circle-outline"
-              size={23}
-              color={COLORS.warning}
-            />
-
-            <View style={styles.noticeContent}>
-              <Text style={styles.noticeTitle}>
-                Reinspection Required
-              </Text>
-
-              <Text style={styles.noticeText}>
-                This place has findings that require a follow-up inspection.
-              </Text>
-            </View>
-          </View>
-        )}
-
-        <View
-          ref={actionRef}
-          collapsable={false}
-          style={styles.actions}
-          onLayout={(event) => {
-            actionY.current =
-              event.nativeEvent.layout.y;
-          }}
-        >
-          <AppButton
-            title={
-              place.status === 'For Reinspection'
-                ? 'Start Reinspection'
-                : 'Start New Inspection'
-            }
-            onPress={() => {
-              if (
-                place.status === 'For Reinspection'
-              ) {
-                router.push(
-                  `/reinspection/${place.id}`
-                );
-                return;
-              }
-
-              router.push({
-                pathname: '/inspection/new',
-                params: {
-                  placeId: place.id,
-                },
-              });
-            }}
-            disabled={!isHousehold}
-          />
-
-          {!isHousehold && (
-            <Text style={styles.developmentNote}>
-              The official inspection form for this place type is not yet available. Household inspection data will not be used for it.
-            </Text>
           )}
         </View>
 
@@ -642,17 +784,18 @@ type InspectionHistoryCardProps = {
   inspection: StoredInspection;
   originalInspection?: StoredInspection;
   followUpInspection?: StoredInspection;
+  inspectionType: string;
+  onPress: () => void;
 };
 
 function InspectionHistoryCard({
   inspection,
   originalInspection,
   followUpInspection,
+  inspectionType,
+  onPress,
 }: InspectionHistoryCardProps) {
-  const isReinspection = Boolean(
-    inspection.reinspectionId ||
-      inspection.reinspectionOfInspectionId
-  );
+  const isReinspection = isLinkedReinspection(inspection);
   const result = getInspectionResultDetails(
     inspection.result
   );
@@ -665,18 +808,26 @@ function InspectionHistoryCard({
 
   if (isReinspection) {
     relationship = originalInspection
-      ? `Follow-up to ${formatInspectionDate(
+      ? `Follow-up to ${formatLocalDateTime(
           originalInspection.inspectionDate
         )}`
       : 'Linked follow-up inspection';
   } else if (followUpInspection) {
-    relationship = `Follow-up completed ${formatInspectionDate(
+    relationship = `Follow-up completed ${formatLocalDateTime(
       followUpInspection.inspectionDate
     )}`;
   }
 
   return (
-    <View style={styles.historyCard}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`View ${inspectionType.toLowerCase()} details`}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.historyCard,
+        pressed && styles.pressed,
+      ]}
+    >
       <View style={styles.historyIcon}>
         <Ionicons
           name={
@@ -692,9 +843,7 @@ function InspectionHistoryCard({
       <View style={styles.historyContent}>
         <View style={styles.historyCardHeader}>
           <Text style={styles.historyTitle}>
-            {isReinspection
-              ? 'Reinspection'
-              : 'Initial Inspection'}
+            {inspectionType}
           </Text>
 
           <View
@@ -715,7 +864,7 @@ function InspectionHistoryCard({
         </View>
 
         <Text style={styles.historyDate}>
-          {formatInspectionDate(inspection.inspectionDate)}
+          {formatLocalDateTime(inspection.inspectionDate)}
         </Text>
 
         <Text style={styles.historySummary}>
@@ -728,24 +877,8 @@ function InspectionHistoryCard({
           </Text>
         ) : null}
       </View>
-    </View>
+    </Pressable>
   );
-}
-
-function formatInspectionDate(value: string) {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return 'Date not available';
-  }
-
-  return date.toLocaleString('en-PH', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
 }
 
 function formatSyncStatus(status: StoredInspection['syncStatus']) {
@@ -1077,13 +1210,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  reinspectionNotice: {
+  reinspectionStatusCard: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+  },
+
+  reinspectionStatusHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: SPACING.sm,
-    backgroundColor: '#FFF4DD',
-    borderRadius: RADIUS.lg,
-    padding: SPACING.md,
   },
 
   noticeContent: {
@@ -1101,6 +1239,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     color: COLORS.textSecondary,
+  },
+
+  reinspectionActions: {
+    gap: SPACING.sm,
+    marginTop: SPACING.md,
   },
 
   actions: {

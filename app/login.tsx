@@ -28,7 +28,7 @@ import {
 } from '@/utils/validation';
 import { hasCompletedOnboarding } from '@/storage/secureStorage';
 import { useAuth } from '@/context/AuthContext';
-import { FirebaseError } from 'firebase/app';
+import { SupabaseServiceError } from '@/services/supabaseServiceError';
 
 export default function LoginScreen() {
   const { signIn, configurationReady } = useAuth();
@@ -135,20 +135,19 @@ export default function LoginScreen() {
 
             {!configurationReady && (
               <Text style={styles.configurationError}>
-                Firebase configuration is missing. Add the project values to
-                .env.local and restart Expo.
+                Supabase configuration is missing. Add the public project
+                values to .env.local and restart Expo.
               </Text>
             )}
           </View>
 
           <View style={styles.securityNotice}>
             <Text style={styles.securityTitle}>
-              AUTHORIZED ACCESS ONLY
+              AUTHORIZED BSI ACCESS ONLY
             </Text>
 
             <Text style={styles.securityText}>
-              This system is intended for authorized sanitary
-              inspection personnel.
+              This system is for authorized sanitary inspection personnel. Need an account? Contact your administrator.
             </Text>
           </View>
         </ScrollView>
@@ -241,16 +240,12 @@ const styles = StyleSheet.create({
 });
 
 function getLoginErrorMessage(error: unknown) {
-  if (error instanceof FirebaseError) {
-    if (
-      error.code === 'auth/invalid-credential' ||
-      error.code === 'auth/user-not-found' ||
-      error.code === 'auth/wrong-password'
-    ) {
+  if (error instanceof SupabaseServiceError) {
+    if (error.code === 'invalid_credentials') {
       return 'The email address or password is incorrect.';
     }
 
-    if (error.code === 'auth/network-request-failed') {
+    if (error.retryable) {
       return 'A network connection is required for this sign-in attempt.';
     }
   }

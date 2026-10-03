@@ -1,18 +1,25 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  collection,
-  doc,
-  onSnapshot,
-  query,
-  setDoc,
-  where,
-} from 'firebase/firestore';
 
-import { firestoreDb, requireFirebase } from '@/services/firebase';
-import { Place } from '@/types/place';
+import {
+  createSupabasePlace,
+  fetchSupabasePlaces,
+  updateSupabasePlace,
+} from '@/services/supabasePlaceService';
+import type { Place } from '@/types/place';
+
+type RegisterPlaceInput = Pick<
+  Place,
+  'name' | 'representativeName' | 'purok' | 'address' | 'placeType'
+>;
 
 function cacheKey(uid: string, barangayId: string) {
   return `suta_places:${uid}:${barangayId}`;
+}
+
+function createPlaceId() {
+  return `place_${Date.now()}_${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
 }
 
 export async function getCachedPlaces(uid: string, barangayId: string) {
@@ -20,44 +27,23 @@ export async function getCachedPlaces(uid: string, barangayId: string) {
   if (!raw) return [];
 
   try {
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     return Array.isArray(parsed) ? (parsed as Place[]) : [];
   } catch {
     return [];
   }
 }
 
-export function subscribeToBarangayPlaces(
+export async function fetchAndCachePlaces(
   uid: string,
-  barangayId: string,
-  onPlaces: (places: Place[]) => void,
-  onError: (error: Error) => void
+  barangayId: string
 ) {
-  if (!firestoreDb) {
-    onError(new Error('Firebase is not configured.'));
-    return () => undefined;
-  }
-
-  const placesQuery = query(
-    collection(firestoreDb, 'places'),
-    where('barangayId', '==', barangayId)
+  const places = await fetchSupabasePlaces();
+  await AsyncStorage.setItem(
+    cacheKey(uid, barangayId),
+    JSON.stringify(places)
   );
-
-  return onSnapshot(
-    placesQuery,
-    (snapshot) => {
-      const places = snapshot.docs.map(
-        (placeDoc) =>
-          ({ ...placeDoc.data(), id: placeDoc.id }) as Place
-      );
-      onPlaces(places);
-      void AsyncStorage.setItem(
-        cacheKey(uid, barangayId),
-        JSON.stringify(places)
-      );
-    },
-    (error) => onError(error)
-  );
+  return places;
 }
 
 export async function savePlace(
@@ -67,23 +53,49 @@ export async function savePlace(
   uid: string,
   barangayId: string
 ) {
-  const { db } = requireFirebase();
-  const reference = place.id
-    ? doc(db, 'places', place.id)
-    : doc(collection(db, 'places'));
+  if (place.id) {
+    await updateSupabasePlace(place.id, {
+      name: place.name,
+      representativeName: place.representativeName,
+      address: place.address,
+      purok: place.purok,
+      placeType: place.placeType,
+      status: place.status,
+      riskLevel: place.riskLevel,
+      ...(place.lastInspectionDate
+        ? { lastInspectionDate: place.lastInspectionDate }
+        : {}),
+    });
+    return place.id;
+  }
 
-  await setDoc(
-    reference,
-    {
-      ...place,
-      id: reference.id,
-      barangayId,
-      createdByUid: uid,
-      updatedByUid: uid,
-      updatedAt: new Date().toISOString(),
-    },
-    { merge: true }
-  );
+  const id = createPlaceId();
+  await createSupabasePlace({
+    ...place,
+    id,
+    barangayId,
+    createdByUid: uid,
+  });
+  return id;
+}
 
-  return reference.id;
+export async function registerPlace(
+  place: RegisterPlaceInput,
+  uid: string,
+  barangayId: string,
+  barangay: string
+) {
+  const id = createPlaceId();
+
+  await createSupabasePlace({
+    ...place,
+    id,
+    barangayId,
+    barangay,
+    createdByUid: uid,
+    status: 'Not Inspected',
+    riskLevel: 'Low',
+  });
+
+  return id;
 }

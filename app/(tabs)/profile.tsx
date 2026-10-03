@@ -34,7 +34,7 @@ export default function ProfileScreen() {
           <ProfileRow label="Email" value={profile?.email} />
           <ProfileRow label="Contact number" value={profile?.contactNumber} />
           <ProfileRow label="Assigned barangay" value={profile?.assignedBarangay} />
-          <ProfileRow label="UID" value={profile?.uid} />
+          <ProfileRow label="Role" value={profile?.role} />
         </View>
 
         <AppButton title="Log Out" variant="outline" onPress={handleLogout} />

@@ -1,6 +1,8 @@
 import {
   createContext,
+  type Dispatch,
   ReactNode,
+  type SetStateAction,
   useContext,
   useState,
 } from 'react';
@@ -9,9 +11,9 @@ import { HouseholdInspection } from '@/types/householdInspection';
 
 type InspectionContextType = {
   draftInspection: HouseholdInspection | null;
-  setDraftInspection: (
-    inspection: HouseholdInspection | null
-  ) => void;
+  setDraftInspection: Dispatch<
+    SetStateAction<HouseholdInspection | null>
+  >;
   clearDraftInspection: () => void;
 };
 

@@ -25,6 +25,11 @@ import {
   getStoredInspections,
   StoredInspection,
 } from '@/storage/inspectionStorage';
+import { formatLocalDateTime } from '@/utils/dateTime';
+import {
+  getInspectionResultLabel,
+  getInspectionTypeLabel,
+} from '@/utils/inspectionDisplay';
 
 export default function SyncScreen() {
   const { profile } = useAuth();
@@ -265,6 +270,10 @@ export default function SyncScreen() {
                     inspection={
                       inspection
                     }
+                    placeHistory={inspections.filter(
+                      (candidate) =>
+                        candidate.placeId === inspection.placeId
+                    )}
                   />
                 )
               )}
@@ -298,6 +307,21 @@ export default function SyncScreen() {
               </Text>
             </View>
           )}
+
+          {failedCount > 0 && (
+            <View style={styles.failedNotice}>
+              <Ionicons
+                name="alert-circle-outline"
+                size={21}
+                color={COLORS.violation}
+              />
+              <Text style={styles.failedNoticeText}>
+                {failedCount}{' '}
+                {failedCount === 1 ? 'inspection remains' : 'inspections remain'}{' '}
+                stored on this device but did not synchronize. Automatic retry is not available yet.
+              </Text>
+            </View>
+          )}
         </ScrollView>
       )}
     </View>
@@ -306,8 +330,10 @@ export default function SyncScreen() {
 
 function InspectionCard({
   inspection,
+  placeHistory,
 }: {
   inspection: StoredInspection;
+  placeHistory: StoredInspection[];
 }) {
   const { getPlaceById } = usePlaces();
   const place =
@@ -315,7 +341,7 @@ function InspectionCard({
 
   const placeName =
     place?.name ??
-    `Place ${inspection.placeId}`;
+    'Place not available';
 
   const representative =
     place?.representativeName ??
@@ -325,11 +351,11 @@ function InspectionCard({
     place?.purok ??
     'Purok not available';
 
-  const savedDate = formatDate(
+  const savedDate = formatLocalDateTime(
     inspection.savedAt
   );
 
-  const inspectionDate = formatDate(
+  const inspectionDate = formatLocalDateTime(
     inspection.inspectionDate
   );
 
@@ -337,6 +363,13 @@ function InspectionCard({
     getStatusInfo(
       inspection.syncStatus
     );
+
+  const inspectionType = getInspectionTypeLabel(
+    inspection,
+    placeHistory
+  );
+
+  const result = getInspectionResultLabel(inspection.result);
 
   return (
     <View style={styles.recordCard}>
@@ -353,7 +386,7 @@ function InspectionCard({
           <Text
             style={styles.placeName}
           >
-            {placeName}
+            {inspectionType} — {placeName}
           </Text>
 
           <Text
@@ -408,16 +441,17 @@ function InspectionCard({
       />
 
       <InfoLine
+        icon="clipboard-outline"
+        label="Result"
+        value={result}
+      />
+
+      <InfoLine
         icon="phone-portrait-outline"
         label="Saved on Device"
         value={savedDate}
       />
 
-      <View style={styles.recordFooter}>
-        <Text style={styles.recordId}>
-          ID: {inspection.id}
-        </Text>
-      </View>
     </View>
   );
 }
@@ -480,22 +514,6 @@ function InfoLine({
       </Text>
     </View>
   );
-}
-
-function formatDate(value: string) {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return 'Unknown date';
-  }
-
-  return date.toLocaleString('en-PH', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
 }
 
 function getStatusInfo(
@@ -764,18 +782,6 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
 
-  recordFooter: {
-    marginTop: SPACING.sm,
-    paddingTop: SPACING.sm,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.divider,
-  },
-
-  recordId: {
-    fontSize: 9,
-    color: COLORS.textMuted,
-  },
-
   pendingNotice: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -790,6 +796,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 17,
     color: COLORS.offline,
+  },
+
+  failedNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.violationSoft,
+  },
+
+  failedNoticeText: {
+    flex: 1,
+    fontSize: 11,
+    lineHeight: 17,
+    color: COLORS.violation,
   },
 
   empty: {

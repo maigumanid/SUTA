@@ -3,7 +3,7 @@ import {
   router,
   useLocalSearchParams,
 } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
   Alert,
@@ -14,15 +14,23 @@ import {
   View,
 } from 'react-native';
 
+import EvidencePreviewGallery from '@/components/inspection/EvidencePreviewGallery';
 import { useInspection } from '@/context/InspectionContext';
 import { useAuth } from '@/context/AuthContext';
-import { saveInspectionLocally } from '@/storage/inspectionStorage';
+import { usePlaces } from '@/context/PlacesContext';
+import {
+  getStoredInspectionsForPlace,
+  saveInspectionLocally,
+  type StoredInspection,
+} from '@/storage/inspectionStorage';
 import { completeReinspection } from '@/storage/reinspectionStorage';
 import { uploadInspection } from '@/services/inspectionService';
-import { uploadReinspection } from '@/services/reinspectionService';
+import { formatLocalDate, formatLocalDateTime } from '@/utils/dateTime';
+import { getInspectionTypeLabel } from '@/utils/inspectionDisplay';
 
 export default function InspectionSummaryScreen() {
   const { profile } = useAuth();
+  const { getPlaceById, refreshPlaces } = usePlaces();
   const { tour } = useLocalSearchParams<{
     tour?: string;
   }>();
@@ -35,23 +43,44 @@ export default function InspectionSummaryScreen() {
   } = useInspection();
 
   const [isSaving, setIsSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState('');
+  const [placeHistory, setPlaceHistory] =
+    useState<StoredInspection[]>([]);
 
-  const formatDate = (value?: string) => {
-    if (!value) {
-      return 'Not recorded';
+  const place = draftInspection
+    ? getPlaceById(draftInspection.placeId)
+    : undefined;
+
+  useEffect(() => {
+    if (!draftInspection || !profile) {
+      setPlaceHistory([]);
+      return;
     }
 
-    const date = new Date(value);
+    void getStoredInspectionsForPlace(draftInspection.placeId, {
+      bsiUid: profile.uid,
+      barangayId: profile.assignedBarangayId,
+    }).then(setPlaceHistory);
+  }, [draftInspection, profile]);
 
-    if (Number.isNaN(date.getTime())) {
-      return 'Not recorded';
-    }
+  const resetInspectionFlowTo = (
+    pathname: '/place/[id]' | '/sync',
+    placeId?: string
+  ) => {
+    router.dismissAll();
 
-    return date.toLocaleDateString('en-PH', {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
+    requestAnimationFrame(() => {
+      router.replace('/(tabs)/establishments');
+      requestAnimationFrame(() => {
+        if (pathname === '/place/[id]' && placeId) {
+          router.push({
+            pathname,
+            params: { id: placeId },
+          });
+          return;
+        }
+
+        router.push('/sync');
+      });
     });
   };
 
@@ -215,7 +244,6 @@ export default function InspectionSummaryScreen() {
 
     try {
       setIsSaving(true);
-      setSaveMessage('Saving inspection...');
 
       console.log(
         'DRAFT INSPECTION:',
@@ -231,24 +259,18 @@ export default function InspectionSummaryScreen() {
         ...scope,
       });
 
-      if (draftInspection.reinspectionId) {
-        const completedReinspection = await completeReinspection(
-          draftInspection.reinspectionId,
-          saved.id,
-          scope
-        );
-        if (completedReinspection) {
-          try {
-            await uploadReinspection(completedReinspection);
-          } catch (uploadError) {
-            console.error('Reinspection completion upload deferred:', uploadError);
-          }
-        }
-      }
+      const completedReinspection = draftInspection.reinspectionId
+        ? await completeReinspection(
+            draftInspection.reinspectionId,
+            saved.id,
+            scope
+          )
+        : undefined;
 
       let synced = true;
       try {
-        await uploadInspection(saved, scope);
+        await uploadInspection(saved, scope, completedReinspection);
+        await refreshPlaces();
       } catch (uploadError) {
         synced = false;
         console.error('Inspection upload deferred:', uploadError);
@@ -257,10 +279,6 @@ export default function InspectionSummaryScreen() {
       console.log(
         'SAVED INSPECTION:',
         saved
-      );
-
-      setSaveMessage(
-        'Inspection saved successfully.'
       );
 
       Alert.alert(
@@ -274,17 +292,15 @@ export default function InspectionSummaryScreen() {
             onPress: () => {
               clearDraftInspection();
 
-              if (
-                draftInspection.result ===
-                'for_reinspection'
-              ) {
-                router.replace(
-                  `/reinspection/${saved.id}`
+              if (synced) {
+                resetInspectionFlowTo(
+                  '/place/[id]',
+                  saved.placeId
                 );
                 return;
               }
 
-              router.replace('/sync');
+              resetInspectionFlowTo('/sync');
             },
           },
         ],
@@ -296,10 +312,6 @@ export default function InspectionSummaryScreen() {
       console.error(
         'SAVE ERROR:',
         error
-      );
-
-      setSaveMessage(
-        'Unable to save inspection.'
       );
 
       Alert.alert(
@@ -435,34 +447,36 @@ export default function InspectionSummaryScreen() {
         >
           <ReviewRow
             label="Inspection Date"
-            value={formatDate(
-              draftInspection.inspectionDate
+            value={formatLocalDateTime(
+              draftInspection.inspectionDate,
+              'Not recorded'
             )}
           />
 
           <ReviewRow
-            label="Place ID"
-            value={
-              draftInspection.placeId ||
-              'Not recorded'
-            }
+            label="Place"
+            value={place?.name ?? 'Place not available'}
           />
+
+          {place ? (
+            <ReviewRow
+              label="Location"
+              value={`${place.purok} · ${place.barangay ?? profile?.assignedBarangay ?? 'Assigned barangay'}`}
+            />
+          ) : null}
 
           <ReviewRow
             label="Inspection Type"
-            value={
-              draftInspection.reinspectionId
-                ? 'Reinspection'
-                : 'Initial Inspection'
-            }
+            value={getInspectionTypeLabel(
+              draftInspection,
+              placeHistory
+            )}
           />
 
           {draftInspection.reinspectionOfInspectionId && (
             <ReviewRow
-              label="Original Inspection ID"
-              value={
-                draftInspection.reinspectionOfInspectionId
-              }
+              label="Relationship"
+              value="Linked follow-up to the original inspection"
             />
           )}
 
@@ -482,8 +496,9 @@ export default function InspectionSummaryScreen() {
 
           <ReviewRow
             label="Location Captured"
-            value={formatDate(
-              location?.capturedAt
+            value={formatLocalDateTime(
+              location?.capturedAt,
+              'Not recorded'
             )}
             last
           />
@@ -534,9 +549,10 @@ export default function InspectionSummaryScreen() {
             <>
               <ReviewRow
                 label="Date Validation Done"
-                value={formatDate(
+                value={formatLocalDate(
                   water.microbialTest
-                    .dateValidationDone
+                    .dateValidationDone,
+                  'Not recorded'
                 )}
               />
 
@@ -570,9 +586,10 @@ export default function InspectionSummaryScreen() {
             <>
               <ReviewRow
                 label="Date Testing Done"
-                value={formatDate(
+                value={formatLocalDate(
                   water.arsenicTest
-                    .dateTestingDone
+                    .dateTestingDone,
+                  'Not recorded'
                 )}
               />
 
@@ -655,15 +672,22 @@ export default function InspectionSummaryScreen() {
           ) : (
             draftInspection.findings.map(
               (finding, index) => (
-                <ReviewRow
+                <View
                   key={finding.id}
-                  label={`Finding ${index + 1} — ${getFindingCategory(finding.category)}`}
-                  value={`${finding.details}\nEvidence: ${finding.evidence.length} ${finding.evidence.length === 1 ? 'photo' : 'photos'}`}
-                  last={
-                    index ===
-                    draftInspection.findings.length - 1
-                  }
-                />
+                  style={[
+                    styles.findingReview,
+                    index !== draftInspection.findings.length - 1 &&
+                      styles.reviewRowBorder,
+                  ]}
+                >
+                  <Text style={styles.reviewLabel}>
+                    {`Finding ${index + 1} — ${getFindingCategory(finding.category)}`}
+                  </Text>
+                  <Text style={styles.reviewValue}>
+                    {finding.details}
+                  </Text>
+                  <EvidencePreviewGallery evidence={finding.evidence} />
+                </View>
               )
             )
           )}
@@ -685,26 +709,6 @@ export default function InspectionSummaryScreen() {
               'No remarks recorded.'}
           </Text>
         </Section>
-
-        {saveMessage !== '' && (
-          <View style={styles.saveStatus}>
-            <Ionicons
-              name={
-                saveMessage.includes(
-                  'successfully'
-                )
-                  ? 'checkmark-circle'
-                  : 'information-circle'
-              }
-              size={20}
-              color="#075E5A"
-            />
-
-            <Text style={styles.saveStatusText}>
-              {saveMessage}
-            </Text>
-          </View>
-        )}
 
         <Pressable
           disabled={isSaving}
@@ -964,6 +968,10 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
   },
 
+  findingReview: {
+    paddingVertical: 13,
+  },
+
   reviewRowBorder: {
     borderBottomWidth: 1,
     borderBottomColor: '#E7E9E6',
@@ -995,22 +1003,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
     color: '#17211F',
-  },
-
-  saveStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: '#EEF7F5',
-  },
-
-  saveStatusText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#075E5A',
   },
 
   saveButton: {

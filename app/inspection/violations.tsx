@@ -1,8 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import {
+  router,
+  useFocusEffect,
+  useLocalSearchParams,
+} from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +18,7 @@ import {
 
 import AppButton from '@/components/common/AppButton';
 import KeyboardSafeView from '@/components/common/KeyboardSafeView';
+import EvidencePreviewGallery from '@/components/inspection/EvidencePreviewGallery';
 import { COLORS, RADIUS, SPACING } from '@/constants/theme';
 import { useInspection } from '@/context/InspectionContext';
 import {
@@ -20,7 +26,11 @@ import {
   InspectionFinding,
   InspectionResult,
 } from '@/types/householdInspection';
-import { deleteEvidencePhoto } from '@/services/evidenceService';
+import {
+  deleteEvidencePhoto,
+  type EvidenceSource,
+  selectEvidencePhoto,
+} from '@/services/evidenceService';
 
 const RESULT_OPTIONS: {
   value: InspectionResult;
@@ -88,7 +98,33 @@ export default function ViolationsScreen() {
   const [category, setCategory] =
     useState<FindingCategory | undefined>();
   const [details, setDetails] = useState('');
+  const [remarks, setRemarks] = useState(
+    draftInspection?.remarks ?? ''
+  );
   const [formError, setFormError] = useState('');
+  const [activeFindingId, setActiveFindingId] =
+    useState<string | null>(null);
+
+  useEffect(() => {
+    setDraftInspection((current) =>
+      current
+        ? {
+            ...current,
+            result,
+            findings,
+            remarks,
+          }
+        : current
+    );
+  }, [findings, remarks, result, setDraftInspection]);
+
+  useFocusEffect(
+    useCallback(() => {
+      setResult(draftInspection?.result);
+      setFindings(draftInspection?.findings ?? []);
+      setRemarks(draftInspection?.remarks ?? '');
+    }, [draftInspection])
+  );
 
   if (!draftInspection) {
     return (
@@ -152,6 +188,94 @@ export default function ViolationsScreen() {
     );
   };
 
+  const addEvidence = async (
+    findingId: string,
+    source: EvidenceSource
+  ) => {
+    if (activeFindingId) {
+      return;
+    }
+
+    setActiveFindingId(findingId);
+    const selection = await selectEvidencePhoto(source);
+    setActiveFindingId(null);
+
+    if (selection.status === 'canceled') {
+      return;
+    }
+
+    if (selection.status === 'permission_denied') {
+      Alert.alert(
+        'Camera Permission Required',
+        'SUTA cannot capture evidence without camera permission.',
+        selection.canAskAgain
+          ? [{ text: 'OK' }]
+          : [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Open Settings',
+                onPress: () => {
+                  void Linking.openSettings();
+                },
+              },
+            ]
+      );
+      return;
+    }
+
+    if (selection.status === 'error') {
+      Alert.alert('Evidence Not Saved', selection.message);
+      return;
+    }
+
+    setFindings((current) =>
+      current.map((finding) =>
+        finding.id === findingId
+          ? {
+              ...finding,
+              evidence: [
+                ...finding.evidence,
+                selection.attachment,
+              ],
+            }
+          : finding
+      )
+    );
+  };
+
+  const removeEvidence = (
+    findingId: string,
+    evidenceId: string,
+    uri: string
+  ) => {
+    Alert.alert(
+      'Remove Evidence',
+      'Remove this photo from the finding?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            deleteEvidencePhoto(uri);
+            setFindings((current) =>
+              current.map((finding) =>
+                finding.id === findingId
+                  ? {
+                      ...finding,
+                      evidence: finding.evidence.filter(
+                        (item) => item.id !== evidenceId
+                      ),
+                    }
+                  : finding
+              )
+            );
+          },
+        },
+      ]
+    );
+  };
+
   const continueToReview = () => {
     if (category || details.trim()) {
       Alert.alert(
@@ -191,22 +315,26 @@ export default function ViolationsScreen() {
       return;
     }
 
-    setDraftInspection({
-      ...draftInspection,
-      result,
-      findings,
-    });
+    setDraftInspection((current) =>
+      current
+        ? {
+            ...current,
+            result,
+            findings,
+            remarks,
+          }
+        : current
+    );
 
-    router.push({
-      pathname:
-        findings.length > 0
-          ? '/inspection/evidence'
-          : '/inspection/summary',
-      params: {
-        ...(tour === 'true'
-          ? { tour: 'true' }
-          : {}),
-      },
+    requestAnimationFrame(() => {
+      router.push({
+        pathname: '/inspection/summary',
+        params: {
+          ...(tour === 'true'
+            ? { tour: 'true' }
+            : {}),
+        },
+      });
     });
   };
 
@@ -352,6 +480,52 @@ export default function ViolationsScreen() {
               <Text style={styles.findingDetails}>
                 {finding.details}
               </Text>
+
+              <View style={styles.evidenceSection}>
+                <Text style={styles.fieldLabel}>
+                  Evidence
+                </Text>
+
+                <Text style={styles.helpText}>
+                  Optional photos remain attached to this finding.
+                </Text>
+
+                <EvidencePreviewGallery
+                  evidence={finding.evidence}
+                  onRemove={(attachment) =>
+                    removeEvidence(
+                      finding.id,
+                      attachment.id,
+                      attachment.uri
+                    )
+                  }
+                />
+
+                <View style={styles.evidenceActions}>
+                  <EvidenceButton
+                    icon="camera-outline"
+                    label="Take Photo"
+                    disabled={activeFindingId !== null}
+                    onPress={() => {
+                      void addEvidence(finding.id, 'camera');
+                    }}
+                  />
+                  <EvidenceButton
+                    icon="images-outline"
+                    label="Choose Photo"
+                    disabled={activeFindingId !== null}
+                    onPress={() => {
+                      void addEvidence(finding.id, 'library');
+                    }}
+                  />
+                </View>
+
+                {activeFindingId === finding.id && (
+                  <Text style={styles.preparingEvidence}>
+                    Preparing evidence photo...
+                  </Text>
+                )}
+              </View>
             </View>
           ))}
 
@@ -420,11 +594,29 @@ export default function ViolationsScreen() {
             )}
 
             <AppButton
-              title="Add Finding"
+              title="+ Add Finding"
               variant="outline"
               onPress={addFinding}
             />
           </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            Remarks
+          </Text>
+          <Text style={styles.helpText}>
+            Add any other relevant observations from the household visit. This is optional.
+          </Text>
+          <TextInput
+            value={remarks}
+            onChangeText={setRemarks}
+            placeholder="Enter remarks if applicable..."
+            placeholderTextColor={COLORS.textMuted}
+            multiline
+            textAlignVertical="top"
+            style={styles.input}
+          />
         </View>
 
         <AppButton
@@ -434,6 +626,40 @@ export default function ViolationsScreen() {
       </ScrollView>
       </View>
     </KeyboardSafeView>
+  );
+}
+
+function EvidenceButton({
+  icon,
+  label,
+  disabled,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.evidenceButton,
+        disabled && styles.disabled,
+        pressed && styles.pressed,
+      ]}
+    >
+      <Ionicons
+        name={icon}
+        size={19}
+        color={COLORS.primary}
+      />
+      <Text style={styles.evidenceButtonText}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -576,6 +802,40 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     color: COLORS.text,
   },
+  evidenceSection: {
+    marginTop: SPACING.md,
+    paddingTop: SPACING.md,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.divider,
+  },
+  evidenceActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginTop: SPACING.sm,
+  },
+  evidenceButton: {
+    flex: 1,
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.surface,
+  },
+  evidenceButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  preparingEvidence: {
+    marginTop: SPACING.sm,
+    textAlign: 'center',
+    fontSize: 11,
+    color: COLORS.textSecondary,
+  },
   formCard: {
     gap: SPACING.sm,
     paddingTop: SPACING.md,
@@ -629,6 +889,9 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 11,
     color: COLORS.violation,
+  },
+  disabled: {
+    opacity: 0.5,
   },
   emptyContainer: {
     flex: 1,

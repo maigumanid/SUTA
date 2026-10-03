@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
-  Alert,
   Linking,
   Pressable,
   ScrollView,
@@ -35,11 +34,37 @@ export default function NewInspectionScreen() {
     originalInspectionId?: string;
   }>();
 
-  const { setDraftInspection } =
+  const { draftInspection, setDraftInspection } =
     useInspection();
 
   const [isCapturingLocation, setIsCapturingLocation] =
     useState(false);
+  const [capturedLocation, setCapturedLocation] =
+    useState<InspectionLocationResult | null>(() => {
+      const draft = draftInspection;
+
+      if (
+        !draft ||
+        draft.placeId !== placeId ||
+        draft.reinspectionId !== reinspectionId ||
+        draft.reinspectionOfInspectionId !==
+          originalInspectionId ||
+        draft.locationCaptureStatus !== 'captured' ||
+        !draft.inspectionLocation
+      ) {
+        return null;
+      }
+
+      return {
+        status: 'captured',
+        attemptedAt:
+          draft.locationCaptureAttemptedAt ??
+          draft.inspectionLocation.capturedAt,
+        location: draft.inspectionLocation,
+      };
+    });
+  const [locationFailure, setLocationFailure] =
+    useState<InspectionLocationResult | null>(null);
 
   const place = placeId
     ? getPlaceById(placeId)
@@ -78,8 +103,7 @@ export default function NewInspectionScreen() {
   const openChecklist = (
     result: InspectionLocationResult
   ) => {
-    setDraftInspection(
-      createInitialHouseholdInspection(place.id, {
+    const locationChanges = {
         inspectionLocation: result.location,
         locationCaptureStatus: result.status,
         locationCaptureAttemptedAt:
@@ -87,25 +111,45 @@ export default function NewInspectionScreen() {
         reinspectionId,
         reinspectionOfInspectionId:
           originalInspectionId,
-      })
+      };
+
+    const matchesCurrentDraft =
+      draftInspection?.placeId === place.id &&
+      draftInspection.reinspectionId === reinspectionId &&
+      draftInspection.reinspectionOfInspectionId ===
+        originalInspectionId;
+
+    setDraftInspection(
+      matchesCurrentDraft
+        ? {
+            ...draftInspection,
+            ...locationChanges,
+          }
+        : createInitialHouseholdInspection(
+            place.id,
+            locationChanges
+          )
     );
 
-    router.push({
-      pathname: '/inspection/checklist',
-      params: {
-        placeId: place.id,
-        ...(tour === 'true'
-          ? { tour: 'true' }
-          : {}),
-      },
+    requestAnimationFrame(() => {
+      router.push({
+        pathname: '/inspection/checklist',
+        params: {
+          placeId: place.id,
+          ...(tour === 'true'
+            ? { tour: 'true' }
+            : {}),
+        },
+      });
     });
   };
 
-  const startChecklist = async () => {
+  const captureCurrentLocation = async () => {
     if (isCapturingLocation) {
       return;
     }
 
+    setLocationFailure(null);
     setIsCapturingLocation(true);
 
     const result =
@@ -114,49 +158,31 @@ export default function NewInspectionScreen() {
     setIsCapturingLocation(false);
 
     if (result.status === 'captured') {
+      setCapturedLocation(result);
       openChecklist(result);
       return;
     }
 
-    const messages = {
-      permission_denied:
-        'Location permission was denied. SUTA will not create or substitute coordinates.',
-      services_disabled:
-        'Location services appear to be disabled. Turn them on and retry to capture the inspection location.',
-      unavailable:
-        'The current location could not be obtained. This may be a temporary GPS or device error.',
-    } as const;
-
-    const shouldOpenSettings =
-      result.status === 'services_disabled' ||
-      (result.status === 'permission_denied' &&
-        result.canAskAgain === false);
-
-    Alert.alert(
-      'Location Not Captured',
-      `${messages[result.status]} You may retry or continue with the inspection without a recorded location.`,
-      [
-        {
-          text: 'Continue Without Location',
-          style: 'cancel',
-          onPress: () => openChecklist(result),
-        },
-        {
-          text: shouldOpenSettings
-            ? 'Open Settings'
-            : 'Retry',
-          onPress: () => {
-            if (shouldOpenSettings) {
-              void Linking.openSettings();
-              return;
-            }
-
-            void startChecklist();
-          },
-        },
-      ]
-    );
+    setLocationFailure(result);
   };
+
+  const locationFailureMessage = (() => {
+    switch (locationFailure?.status) {
+      case 'permission_denied':
+        return 'Location permission was denied. SUTA will not create or substitute coordinates.';
+      case 'services_disabled':
+        return 'Location services are disabled. Turn them on and retry to record this inspection location.';
+      case 'unavailable':
+        return 'The current location could not be obtained. This may be a temporary GPS or device error.';
+      default:
+        return null;
+    }
+  })();
+
+  const shouldOpenLocationSettings =
+    locationFailure?.status === 'services_disabled' ||
+    (locationFailure?.status === 'permission_denied' &&
+      locationFailure.canAskAgain === false);
 
   return (
     <View style={styles.screen}>
@@ -266,6 +292,53 @@ export default function NewInspectionScreen() {
 
         <View>
           <Text style={styles.sectionTitle}>
+            Inspection Location
+          </Text>
+
+          <View style={styles.locationCard}>
+            <Text style={styles.locationPurpose}>
+              Capture your current location to record where this inspection was conducted. This is separate from the registered place address.
+            </Text>
+
+            <View style={styles.registeredAddress}>
+              <Text style={styles.infoLabel}>
+                Registered address
+              </Text>
+              <Text style={styles.infoValue}>
+                {place.address}
+              </Text>
+            </View>
+
+            {capturedLocation?.status === 'captured' && (
+              <View style={styles.locationSuccess}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={22}
+                  color={COLORS.compliant}
+                />
+                <Text style={styles.locationSuccessText}>
+                  Current inspection location captured.
+                </Text>
+              </View>
+            )}
+
+            {locationFailureMessage && (
+              <View style={styles.locationFailure}>
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={22}
+                  color={COLORS.violation}
+                />
+                <Text style={styles.locationFailureText}>
+                  {locationFailureMessage}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        <View>
+          <Text style={styles.sectionTitle}>
             Before You Begin
           </Text>
 
@@ -282,7 +355,7 @@ export default function NewInspectionScreen() {
 
             <ReminderItem
               icon="navigate-outline"
-              text="SUTA will request permission and capture the current inspection location."
+              text="The captured GPS location records where you were when this inspection was conducted."
             />
 
             <ReminderItem
@@ -297,12 +370,44 @@ export default function NewInspectionScreen() {
           </View>
         </View>
 
-        <AppButton
-          title="Begin Inspection Checklist"
-          onPress={startChecklist}
-          disabled={!isHousehold}
-          loading={isCapturingLocation}
-        />
+        {capturedLocation?.status === 'captured' ? (
+          <AppButton
+            title="Continue to Checklist"
+            onPress={() => openChecklist(capturedLocation)}
+            disabled={!isHousehold}
+          />
+        ) : locationFailure ? (
+          <View style={styles.locationActions}>
+            <AppButton
+              title="Retry Location"
+              onPress={captureCurrentLocation}
+              disabled={!isHousehold}
+              loading={isCapturingLocation}
+            />
+            <AppButton
+              title="Continue Without Location"
+              variant="outline"
+              onPress={() => openChecklist(locationFailure)}
+              disabled={!isHousehold}
+            />
+            {shouldOpenLocationSettings && (
+              <AppButton
+                title="Open Location Settings"
+                variant="outline"
+                onPress={() => {
+                  void Linking.openSettings();
+                }}
+              />
+            )}
+          </View>
+        ) : (
+          <AppButton
+            title="Capture Current Location"
+            onPress={captureCurrentLocation}
+            disabled={!isHousehold}
+            loading={isCapturingLocation}
+          />
+        )}
 
         {!isHousehold && (
           <Text style={styles.developmentNote}>
@@ -539,6 +644,63 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     borderRadius: RADIUS.lg,
     backgroundColor: COLORS.surface,
+  },
+
+  locationCard: {
+    gap: SPACING.md,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    backgroundColor: COLORS.surface,
+  },
+
+  locationPurpose: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: COLORS.textSecondary,
+  },
+
+  registeredAddress: {
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.surfaceMuted,
+  },
+
+  locationSuccess: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    padding: SPACING.sm,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.compliantSoft,
+  },
+
+  locationSuccessText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.compliant,
+  },
+
+  locationFailure: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm,
+    padding: SPACING.sm,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.violationSoft,
+  },
+
+  locationFailureText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19,
+    color: COLORS.violation,
+  },
+
+  locationActions: {
+    gap: SPACING.sm,
   },
 
   reminderItem: {

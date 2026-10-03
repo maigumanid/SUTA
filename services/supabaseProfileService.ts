@@ -42,6 +42,12 @@ export async function loadSupabaseBsiProfile() {
   try {
     return mapSupabaseProfile(data);
   } catch (error) {
-    throwSupabaseServiceError('Validate BSI profile', error);
+    throw new SupabaseServiceError(
+      'Validate BSI profile',
+      error instanceof Error
+        ? error.message
+        : 'The authenticated BSI profile is incomplete.',
+      { cause: error, code: 'PROFILE_INVALID' }
+    );
   }
 }

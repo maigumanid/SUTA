@@ -1,29 +1,39 @@
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut as firebaseSignOut,
-  User,
-} from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import type { User } from '@supabase/supabase-js';
 import {
   createContext,
-  PropsWithChildren,
+  type PropsWithChildren,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
+import { AppState, Platform } from 'react-native';
 
 import {
-  firebaseAuth,
-  firestoreDb,
-  isFirebaseConfigured,
-  requireFirebase,
-} from '@/services/firebase';
-import { BsiProfile } from '@/types/inspector';
+  isSupabaseConfigured,
+  requireSupabase,
+  supabaseClient,
+} from '@/services/supabase';
+import { loadSupabaseBsiProfile } from '@/services/supabaseProfileService';
+import {
+  SupabaseServiceError,
+  throwSupabaseServiceError,
+} from '@/services/supabaseServiceError';
+import {
+  cacheBsiProfile,
+  getCachedBsiProfile,
+} from '@/storage/profileStorage';
+import type { BsiProfile } from '@/types/inspector';
+
+export type AuthUser = {
+  email?: string;
+  uid: string;
+};
 
 type AuthContextValue = {
-  user: User | null;
+  user: AuthUser | null;
   profile: BsiProfile | null;
   isLoading: boolean;
   configurationReady: boolean;
@@ -33,104 +43,184 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-async function loadBsiProfile(uid: string): Promise<BsiProfile> {
-  if (!firestoreDb) {
-    throw new Error('Firebase is not configured.');
-  }
-
-  const snapshot = await getDoc(doc(firestoreDb, 'bsiProfiles', uid));
-
-  if (!snapshot.exists()) {
-    throw new Error(
-      'This account has no BSI profile. Ask the system owner to create its bsiProfiles record.'
-    );
-  }
-
-  const data = snapshot.data() as Partial<BsiProfile>;
-  if (
-    !data.name ||
-    !data.email ||
-    !data.contactNumber ||
-    !data.assignedBarangayId ||
-    !data.assignedBarangay
-  ) {
-    throw new Error('This BSI profile is incomplete.');
-  }
-
+function mapAuthUser(user: User): AuthUser {
   return {
-    uid,
-    name: data.name,
-    email: data.email,
-    contactNumber: data.contactNumber,
-    assignedBarangayId: data.assignedBarangayId,
-    assignedBarangay: data.assignedBarangay,
-    role: 'BSI',
+    uid: user.id,
+    ...(user.email ? { email: user.email } : {}),
   };
 }
 
+function isInvalidProfileError(error: unknown) {
+  return (
+    error instanceof SupabaseServiceError &&
+    (error.code === 'PROFILE_NOT_FOUND' ||
+      error.code === 'PROFILE_INVALID' ||
+      error.code === 'AUTH_REQUIRED')
+  );
+}
+
 export function AuthProvider({ children }: PropsWithChildren) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<BsiProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const hydrationId = useRef(0);
 
-  useEffect(() => {
-    if (!firebaseAuth) {
+  const hydrateUser = useCallback(async (
+    nextUser: User | null,
+    allowCachedProfile = true
+  ) => {
+    const currentHydration = ++hydrationId.current;
+
+    if (!nextUser) {
+      setUser(null);
+      setProfile(null);
       setIsLoading(false);
       return;
     }
 
-    const auth = firebaseAuth;
+    setUser(mapAuthUser(nextUser));
+    setIsLoading(true);
 
-    return onAuthStateChanged(auth, async (nextUser) => {
-      setIsLoading(true);
-      if (!nextUser) {
+    const cachedProfile = allowCachedProfile
+      ? await getCachedBsiProfile(nextUser.id)
+      : null;
+    if (currentHydration !== hydrationId.current) return;
+
+    if (cachedProfile) {
+      setProfile(cachedProfile);
+      setIsLoading(false);
+    }
+
+    try {
+      const liveProfile = await loadSupabaseBsiProfile();
+      if (currentHydration !== hydrationId.current) return;
+
+      await cacheBsiProfile(liveProfile);
+      if (currentHydration !== hydrationId.current) return;
+
+      setProfile(liveProfile);
+    } catch (error) {
+      if (currentHydration !== hydrationId.current) return;
+
+      if (isInvalidProfileError(error)) {
         setUser(null);
         setProfile(null);
+        await supabaseClient?.auth.signOut();
+      } else {
+        console.error('Unable to refresh the BSI profile:', error);
+        if (!cachedProfile) {
+          setProfile(null);
+        }
+      }
+    } finally {
+      if (currentHydration === hydrationId.current) {
+        setIsLoading(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!supabaseClient) {
+      setIsLoading(false);
+      return;
+    }
+
+    const client = supabaseClient;
+    let active = true;
+
+    void client.auth.getSession().then(({ data, error }) => {
+      if (!active) return;
+
+      if (error) {
+        console.error('Unable to restore the Supabase session:', error);
         setIsLoading(false);
         return;
       }
 
-      try {
-        const nextProfile = await loadBsiProfile(nextUser.uid);
-        setUser(nextUser);
-        setProfile(nextProfile);
-      } catch (error) {
-        setUser(null);
-        setProfile(null);
-        await firebaseSignOut(auth);
-        console.error('Unable to load BSI profile:', error);
-      } finally {
-        setIsLoading(false);
-      }
+      void hydrateUser(data.session?.user ?? null);
     });
-  }, []);
+
+    const { data: authListener } = client.auth.onAuthStateChange(
+      (event, session) => {
+        if (!active || event === 'INITIAL_SESSION') return;
+        void hydrateUser(
+          session?.user ?? null,
+          event !== 'SIGNED_IN'
+        );
+      }
+    );
+
+    const appStateSubscription =
+      Platform.OS === 'web'
+        ? null
+        : AppState.addEventListener('change', (state) => {
+            if (state === 'active') {
+              client.auth.startAutoRefresh();
+            } else {
+              client.auth.stopAutoRefresh();
+            }
+          });
+
+    if (Platform.OS !== 'web') {
+      client.auth.startAutoRefresh();
+    }
+
+    return () => {
+      active = false;
+      hydrationId.current += 1;
+      authListener.subscription.unsubscribe();
+      appStateSubscription?.remove();
+      if (Platform.OS !== 'web') {
+        client.auth.stopAutoRefresh();
+      }
+    };
+  }, [hydrateUser]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       profile,
       isLoading,
-      configurationReady: isFirebaseConfigured,
+      configurationReady: isSupabaseConfigured,
       signIn: async (email, password) => {
-        const { auth } = requireFirebase();
-        const credential = await signInWithEmailAndPassword(
-          auth,
-          email.trim(),
-          password
-        );
+        const client = requireSupabase();
+        const { data, error } = await client.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+
+        if (error) {
+          throwSupabaseServiceError('Sign in', error);
+        }
+
+        if (!data.user || !data.session) {
+          throw new SupabaseServiceError(
+            'Sign in',
+            'Supabase did not return an authenticated session.',
+            { code: 'AUTH_SESSION_MISSING' }
+          );
+        }
 
         try {
-          const nextProfile = await loadBsiProfile(credential.user.uid);
-          setUser(credential.user);
+          const nextProfile = await loadSupabaseBsiProfile();
+          await cacheBsiProfile(nextProfile);
+          setUser(mapAuthUser(data.user));
           setProfile(nextProfile);
-        } catch (error) {
-          await firebaseSignOut(auth);
-          throw error;
+        } catch (profileError) {
+          await client.auth.signOut();
+          setUser(null);
+          setProfile(null);
+          throw profileError;
         }
       },
       signOut: async () => {
-        const { auth } = requireFirebase();
-        await firebaseSignOut(auth);
+        const client = requireSupabase();
+        const { error } = await client.auth.signOut();
+        if (error) {
+          throwSupabaseServiceError('Sign out', error);
+        }
+
+        hydrationId.current += 1;
         setUser(null);
         setProfile(null);
       },

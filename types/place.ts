@@ -1,11 +1,14 @@
-export type PlaceType =
-  | 'Household / Residence'
-  | 'Food Establishment'
-  | 'Retail Establishment'
-  | 'School'
-  | 'Public Facility'
-  | 'Church'
-  | 'Other Facility';
+export const PLACE_TYPES = [
+  'Household / Residence',
+  'Food Establishment',
+  'Retail Establishment',
+  'School',
+  'Public Facility',
+  'Church',
+  'Other Facility',
+] as const;
+
+export type PlaceType = (typeof PLACE_TYPES)[number];
 
 export type InspectionStatus =
   | 'Compliant'
@@ -19,6 +22,8 @@ export type Place = {
   id: string;
 
   barangayId: string;
+
+  barangay?: string;
 
   createdByUid?: string;
 

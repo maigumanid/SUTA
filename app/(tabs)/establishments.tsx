@@ -33,6 +33,7 @@ import {
 } from '@/constants/theme';
 import {
   Place,
+  PLACE_TYPES as SUPPORTED_PLACE_TYPES,
   PlaceType,
 } from '@/types/place';
 import { usePlaces } from '@/context/PlacesContext';
@@ -40,17 +41,11 @@ import { useAuth } from '@/context/AuthContext';
 
 const PLACE_TYPES: ('All' | PlaceType)[] = [
   'All',
-  'Household / Residence',
-  'Food Establishment',
-  'Retail Establishment',
-  'School',
-  'Public Facility',
-  'Church',
-  'Other Facility',
+  ...SUPPORTED_PLACE_TYPES,
 ];
 
 export default function EstablishmentsScreen() {
-  const { places, isLoading, error } = usePlaces();
+  const { places, isLoading, error, refreshPlaces } = usePlaces();
   const { profile } = useAuth();
 
   const { tour } = useLocalSearchParams<{
@@ -80,12 +75,13 @@ export default function EstablishmentsScreen() {
   useFocusEffect(
     useCallback(() => {
       setIsScreenFocused(true);
+      void refreshPlaces();
 
       return () => {
         setIsScreenFocused(false);
         setTourTarget(null);
       };
-    }, [])
+    }, [refreshPlaces])
   );
 
   const tourSteps = [
@@ -98,7 +94,7 @@ export default function EstablishmentsScreen() {
     {
       title: 'Filter by Place Type',
       description:
-        'Use these filters to view households, establishments, schools, public facilities, and other places.',
+        'Use these filters to view households, businesses, schools, public facilities, and other places.',
       ref: categoryRef,
     },
     {
@@ -282,6 +278,23 @@ export default function EstablishmentsScreen() {
                   {profile?.assignedBarangay ?? 'Assigned barangay'}
                 </Text>
               </View>
+
+              <Pressable
+                onPress={() => router.push('/place/new')}
+                accessibilityRole="button"
+                accessibilityLabel="Add place"
+                style={({ pressed }) => [
+                  styles.addButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Ionicons
+                  name="add"
+                  size={20}
+                  color={COLORS.white}
+                />
+                <Text style={styles.addButtonText}>Add Place</Text>
+              </Pressable>
             </View>
 
             <View
@@ -403,7 +416,7 @@ export default function EstablishmentsScreen() {
 
             <Text style={styles.emptyText}>
               {error
-                ? 'Places could not be refreshed. Check your connection and Firebase access.'
+                ? 'Places could not be refreshed. Check your connection and data access.'
                 : 'Try changing your search or place type.'}
             </Text>
           </View>
@@ -447,7 +460,28 @@ export default function EstablishmentsScreen() {
     },
 
     header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: SPACING.md,
       marginBottom: SPACING.lg,
+    },
+
+    addButton: {
+      minHeight: 44,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: SPACING.xs,
+      paddingHorizontal: SPACING.md,
+      borderRadius: RADIUS.md,
+      backgroundColor: COLORS.primary,
+    },
+
+    addButtonText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: COLORS.white,
     },
 
     title: {

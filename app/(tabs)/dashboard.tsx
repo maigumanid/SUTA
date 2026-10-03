@@ -33,6 +33,7 @@ import {
 } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { usePlaces } from '@/context/PlacesContext';
+import { formatLocalDate } from '@/utils/dateTime';
 import {
   getStoredInspections,
   StoredInspection,
@@ -131,7 +132,7 @@ export default function DashboardScreen() {
     {
       title: 'Inspection Overview',
       description:
-        'These cards show your inspections today and establishments that require reinspection.',
+        'These cards show your inspections today and places that require reinspection.',
       ref: metricsRef,
       y: metricsY,
     },
@@ -145,7 +146,7 @@ export default function DashboardScreen() {
     {
       title: 'Quick Actions',
       description:
-        'Open the establishments directory or check inspections waiting to synchronize.',
+        'Open the places directory or check inspections waiting to synchronize.',
       ref: quickActionsRef,
       y: quickActionsY,
     },
@@ -342,7 +343,7 @@ export default function DashboardScreen() {
             }
           >
             Start a new sanitary inspection
-            for an establishment.
+            for a place.
           </Text>
 
           <AppButton
@@ -372,8 +373,8 @@ export default function DashboardScreen() {
 
           <View style={styles.list}>
             <QuickAction
-              title="Establishments"
-              description="Search establishments and view inspection history."
+              title="Places"
+              description="Search places and view inspection history."
               icon="business-outline"
               onPress={() =>
                 router.push(
@@ -426,12 +427,9 @@ export default function DashboardScreen() {
                 <ReinspectionCard
                   key={record.id}
                   establishmentName={
-                    getPlaceById(record.placeId)?.name ?? `Place ${record.placeId}`
+                    getPlaceById(record.placeId)?.name ?? 'Place not available'
                   }
-                  dueDate={new Date(record.scheduledDate).toLocaleDateString(
-                    'en-PH',
-                    { month: 'short', day: 'numeric', year: 'numeric' }
-                  )}
+                  dueDate={formatLocalDate(record.scheduledDate)}
                   onPress={() => router.push(`/reinspection/${record.id}`)}
                 />
               ))

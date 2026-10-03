@@ -1,7 +1,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Platform } from 'react-native';
 
-import { EvidenceAttachment } from '@/types/householdInspection';
+import type { EvidenceAttachment } from '@/types/householdInspection';
 
 export type EvidenceSource = 'camera' | 'library';
 
@@ -11,9 +11,7 @@ export type EvidenceSelectionResult =
   | { status: 'permission_denied'; canAskAgain: boolean }
   | { status: 'error'; message: string };
 
-function getExtension(
-  asset: ImagePicker.ImagePickerAsset
-) {
+function getExtension(asset: ImagePicker.ImagePickerAsset) {
   const fileName = asset.fileName ?? asset.uri.split(/[?#]/)[0];
   const extensionMatch = fileName.match(/\.[a-zA-Z0-9]+$/);
 
@@ -67,12 +65,8 @@ async function persistAsset(
     uri,
     source,
     createdAt: new Date().toISOString(),
-    ...(asset.fileName
-      ? { fileName: asset.fileName }
-      : {}),
-    ...(asset.mimeType
-      ? { mimeType: asset.mimeType }
-      : {}),
+    ...(asset.fileName ? { fileName: asset.fileName } : {}),
+    ...(asset.mimeType ? { mimeType: asset.mimeType } : {}),
   };
 }
 
@@ -104,9 +98,7 @@ export async function selectEvidencePhoto(
             ...options,
             cameraType: ImagePicker.CameraType.back,
           })
-        : await ImagePicker.launchImageLibraryAsync(
-            options
-          );
+        : await ImagePicker.launchImageLibraryAsync(options);
 
     if (result.canceled || !result.assets[0]) {
       return { status: 'canceled' };
@@ -114,10 +106,7 @@ export async function selectEvidencePhoto(
 
     return {
       status: 'attached',
-      attachment: await persistAsset(
-        result.assets[0],
-        source
-      ),
+      attachment: await persistAsset(result.assets[0], source),
     };
   } catch (error) {
     console.error('Evidence selection failed:', error);
