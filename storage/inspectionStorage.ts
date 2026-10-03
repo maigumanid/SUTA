@@ -25,6 +25,24 @@ export type StoredInspection =
     syncStatus: InspectionSyncStatus;
   };
 
+async function readStoredInspections(
+  scope: InspectionScope
+): Promise<StoredInspection[]> {
+  const data = await AsyncStorage.getItem(
+    inspectionsKey(scope)
+  );
+
+  if (!data) {
+    return [];
+  }
+
+  const parsed = JSON.parse(data);
+
+  return Array.isArray(parsed)
+    ? (parsed as StoredInspection[])
+    : [];
+}
+
 function createInspectionId() {
   return `inspection_${Date.now()}_${Math.random()
     .toString(36)
@@ -35,22 +53,7 @@ export async function getStoredInspections(scope: InspectionScope): Promise<
   StoredInspection[]
 > {
   try {
-    const data =
-      await AsyncStorage.getItem(
-        inspectionsKey(scope)
-      );
-
-    if (!data) {
-      return [];
-    }
-
-    const parsed = JSON.parse(data);
-
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed as StoredInspection[];
+    return await readStoredInspections(scope);
   } catch (error) {
     console.error(
       'getStoredInspections error:',
@@ -59,6 +62,25 @@ export async function getStoredInspections(scope: InspectionScope): Promise<
 
     return [];
   }
+}
+
+export async function getStoredInspectionsForPlace(
+  placeId: string,
+  scope: InspectionScope
+): Promise<StoredInspection[]> {
+  const inspections = await readStoredInspections(scope);
+
+  return inspections
+    .filter((inspection) => inspection.placeId === placeId)
+    .sort((left, right) => {
+      const leftTime = Date.parse(left.inspectionDate);
+      const rightTime = Date.parse(right.inspectionDate);
+
+      return (
+        (Number.isNaN(rightTime) ? 0 : rightTime) -
+        (Number.isNaN(leftTime) ? 0 : leftTime)
+      );
+    });
 }
 
 export async function saveInspectionLocally(

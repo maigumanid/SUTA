@@ -1,6 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
 import {
+  router,
+  useFocusEffect,
+  useLocalSearchParams,
+} from 'expo-router';
+import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,6 +14,7 @@ import {
 } from 'react-native';
 
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -20,10 +26,16 @@ import TourOverlay, {
 
 import AppButton from '@/components/common/AppButton';
 import { COLORS, RADIUS, SPACING } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
 import { usePlaces } from '@/context/PlacesContext';
+import {
+  getStoredInspectionsForPlace,
+  StoredInspection,
+} from '@/storage/inspectionStorage';
 
 export default function PlaceDetailsScreen() {
   const { getPlaceById, isLoading } = usePlaces();
+  const { profile } = useAuth();
   const { id, tour } = useLocalSearchParams<{
     id: string;
     tour?: string;
@@ -37,6 +49,12 @@ export default function PlaceDetailsScreen() {
 
   const [isProfileReady, setIsProfileReady] =
     useState(false);
+  const [inspectionHistory, setInspectionHistory] =
+    useState<StoredInspection[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] =
+    useState(true);
+  const [historyError, setHistoryError] =
+    useState<string | null>(null);
 
   const profileRef = useRef<View>(null);
   const informationRef = useRef<View>(null);
@@ -80,6 +98,42 @@ export default function PlaceDetailsScreen() {
       y: actionY,
     },
   ];
+
+  const loadInspectionHistory = useCallback(async () => {
+    if (!profile) {
+      setInspectionHistory([]);
+      setIsHistoryLoading(false);
+      return;
+    }
+
+    setIsHistoryLoading(true);
+    setHistoryError(null);
+
+    try {
+      const records = await getStoredInspectionsForPlace(id, {
+        bsiUid: profile.uid,
+        barangayId: profile.assignedBarangayId,
+      });
+
+      setInspectionHistory(records);
+    } catch (error) {
+      console.error(
+        'Unable to load inspection history:',
+        error
+      );
+      setHistoryError(
+        'Inspection history could not be loaded from this device.'
+      );
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  }, [id, profile]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadInspectionHistory();
+    }, [loadInspectionHistory])
+  );
 
   const showTourStep = (index: number) => {
     if (!isTourActive) {
@@ -382,7 +436,43 @@ export default function PlaceDetailsScreen() {
             Inspection History
           </Text>
 
-          {!place.lastInspectionDate ? (
+          {isHistoryLoading ? (
+            <View style={styles.historyState}>
+              <ActivityIndicator
+                color={COLORS.primary}
+              />
+              <Text style={styles.historyStateText}>
+                Loading inspection history...
+              </Text>
+            </View>
+          ) : historyError ? (
+            <View style={styles.emptyHistory}>
+              <View style={styles.emptyIcon}>
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={28}
+                  color={COLORS.violation}
+                />
+              </View>
+
+              <Text style={styles.emptyTitle}>
+                History unavailable
+              </Text>
+
+              <Text style={styles.emptyText}>
+                {historyError}
+              </Text>
+
+              <AppButton
+                title="Try Again"
+                variant="outline"
+                onPress={() => {
+                  void loadInspectionHistory();
+                }}
+                style={styles.historyRetry}
+              />
+            </View>
+          ) : inspectionHistory.length === 0 ? (
             <View style={styles.emptyHistory}>
               <View style={styles.emptyIcon}>
                 <Ionicons
@@ -401,40 +491,28 @@ export default function PlaceDetailsScreen() {
               </Text>
             </View>
           ) : (
-            <Pressable
-              style={({ pressed }) => [
-                styles.historyCard,
-                pressed && styles.pressed,
-              ]}
-            >
-              <View style={styles.historyIcon}>
-                <Ionicons
-                  name="clipboard-outline"
-                  size={22}
-                  color={COLORS.primary}
+            <View style={styles.historyList}>
+              {inspectionHistory.map((inspection) => (
+                <InspectionHistoryCard
+                  key={inspection.id}
+                  inspection={inspection}
+                  originalInspection={
+                    inspection.reinspectionOfInspectionId
+                      ? inspectionHistory.find(
+                          (candidate) =>
+                            candidate.id ===
+                            inspection.reinspectionOfInspectionId
+                        )
+                      : undefined
+                  }
+                  followUpInspection={inspectionHistory.find(
+                    (candidate) =>
+                      candidate.reinspectionOfInspectionId ===
+                      inspection.id
+                  )}
                 />
-              </View>
-
-              <View style={styles.historyContent}>
-                <Text style={styles.historyTitle}>
-                  Sanitary Inspection
-                </Text>
-
-                <Text style={styles.historyDate}>
-                  {place.lastInspectionDate}
-                </Text>
-
-                <Text style={styles.historyStatus}>
-                  {place.status}
-                </Text>
-              </View>
-
-              <Ionicons
-                name="chevron-forward"
-                size={20}
-                color={COLORS.textMuted}
-              />
-            </Pressable>
+              ))}
+            </View>
           )}
         </View>
 
@@ -558,6 +636,158 @@ function InfoRow({
       </View>
     </View>
   );
+}
+
+type InspectionHistoryCardProps = {
+  inspection: StoredInspection;
+  originalInspection?: StoredInspection;
+  followUpInspection?: StoredInspection;
+};
+
+function InspectionHistoryCard({
+  inspection,
+  originalInspection,
+  followUpInspection,
+}: InspectionHistoryCardProps) {
+  const isReinspection = Boolean(
+    inspection.reinspectionId ||
+      inspection.reinspectionOfInspectionId
+  );
+  const result = getInspectionResultDetails(
+    inspection.result
+  );
+  const findingLabel =
+    inspection.findings.length === 1
+      ? '1 finding'
+      : `${inspection.findings.length} findings`;
+
+  let relationship: string | undefined;
+
+  if (isReinspection) {
+    relationship = originalInspection
+      ? `Follow-up to ${formatInspectionDate(
+          originalInspection.inspectionDate
+        )}`
+      : 'Linked follow-up inspection';
+  } else if (followUpInspection) {
+    relationship = `Follow-up completed ${formatInspectionDate(
+      followUpInspection.inspectionDate
+    )}`;
+  }
+
+  return (
+    <View style={styles.historyCard}>
+      <View style={styles.historyIcon}>
+        <Ionicons
+          name={
+            isReinspection
+              ? 'refresh-outline'
+              : 'clipboard-outline'
+          }
+          size={22}
+          color={COLORS.primary}
+        />
+      </View>
+
+      <View style={styles.historyContent}>
+        <View style={styles.historyCardHeader}>
+          <Text style={styles.historyTitle}>
+            {isReinspection
+              ? 'Reinspection'
+              : 'Initial Inspection'}
+          </Text>
+
+          <View
+            style={[
+              styles.historyResultBadge,
+              { backgroundColor: result.background },
+            ]}
+          >
+            <Text
+              style={[
+                styles.historyResultText,
+                { color: result.color },
+              ]}
+            >
+              {result.label}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.historyDate}>
+          {formatInspectionDate(inspection.inspectionDate)}
+        </Text>
+
+        <Text style={styles.historySummary}>
+          {findingLabel} · {formatSyncStatus(inspection.syncStatus)}
+        </Text>
+
+        {relationship ? (
+          <Text style={styles.historyRelationship}>
+            {relationship}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function formatInspectionDate(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return 'Date not available';
+  }
+
+  return date.toLocaleString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function formatSyncStatus(status: StoredInspection['syncStatus']) {
+  switch (status) {
+    case 'synced':
+      return 'Synced';
+    case 'failed':
+      return 'Sync failed';
+    default:
+      return 'Pending sync';
+  }
+}
+
+function getInspectionResultDetails(
+  result: StoredInspection['result']
+) {
+  switch (result) {
+    case 'compliant':
+      return {
+        label: 'Compliant',
+        color: COLORS.compliant,
+        background: COLORS.compliantSoft,
+      };
+    case 'non_compliant':
+      return {
+        label: 'Non-Compliant',
+        color: COLORS.violation,
+        background: COLORS.violationSoft,
+      };
+    case 'for_reinspection':
+      return {
+        label: 'For Reinspection',
+        color: COLORS.warning,
+        background: COLORS.warningSoft,
+      };
+    default:
+      return {
+        label: 'Result not recorded',
+        color: COLORS.neutral,
+        background: COLORS.neutralSoft,
+      };
+  }
 }
 
 const styles = StyleSheet.create({
@@ -721,7 +951,7 @@ const styles = StyleSheet.create({
 
   historyCard: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -755,11 +985,63 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
 
-  historyStatus: {
-    marginTop: 4,
-    fontSize: 12,
+  historyList: {
+    gap: SPACING.sm,
+  },
+
+  historyCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+  },
+
+  historyResultBadge: {
+    flexShrink: 1,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: RADIUS.pill,
+  },
+
+  historyResultText: {
+    fontSize: 10,
     fontWeight: '700',
+  },
+
+  historySummary: {
+    marginTop: 5,
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+
+  historyRelationship: {
+    marginTop: 5,
+    fontSize: 12,
+    fontWeight: '600',
     color: COLORS.primary,
+  },
+
+  historyState: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    minHeight: 96,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
+  },
+
+  historyStateText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+  },
+
+  historyRetry: {
+    alignSelf: 'stretch',
+    marginTop: SPACING.md,
   },
 
   emptyHistory: {
