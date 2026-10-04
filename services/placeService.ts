@@ -6,6 +6,7 @@ import {
   updateSupabasePlace,
 } from '@/services/supabasePlaceService';
 import type { Place } from '@/types/place';
+import { UNCLASSIFIED_RISK_STORAGE_VALUE } from '@/utils/riskClassification';
 
 type RegisterPlaceInput = Pick<
   Place,
@@ -94,7 +95,7 @@ export async function registerPlace(
     barangay,
     createdByUid: uid,
     status: 'Not Inspected',
-    riskLevel: 'Low',
+    riskLevel: UNCLASSIFIED_RISK_STORAGE_VALUE,
   });
 
   return id;

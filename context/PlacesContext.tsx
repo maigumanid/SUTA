@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
@@ -30,6 +31,10 @@ export function PlacesProvider({ children }: PropsWithChildren) {
   const [places, setPlaces] = useState<Place[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const activeScopeKey = useRef<string | null>(null);
+  activeScopeKey.current = profile
+    ? `${profile.uid}:${profile.assignedBarangayId}`
+    : null;
 
   const refreshPlaces = useCallback(async () => {
     if (!profile) {
@@ -38,6 +43,7 @@ export function PlacesProvider({ children }: PropsWithChildren) {
       return;
     }
 
+    const requestScopeKey = `${profile.uid}:${profile.assignedBarangayId}`;
     setIsLoading(true);
     setError(null);
 
@@ -46,15 +52,19 @@ export function PlacesProvider({ children }: PropsWithChildren) {
         profile.uid,
         profile.assignedBarangayId
       );
+      if (activeScopeKey.current !== requestScopeKey) return;
       setPlaces(nextPlaces);
     } catch (refreshError) {
+      if (activeScopeKey.current !== requestScopeKey) return;
       setError(
         refreshError instanceof Error
           ? refreshError.message
           : 'Unable to refresh places.'
       );
     } finally {
-      setIsLoading(false);
+      if (activeScopeKey.current === requestScopeKey) {
+        setIsLoading(false);
+      }
     }
   }, [profile]);
 

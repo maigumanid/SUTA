@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 
 import EvidencePreviewGallery from '@/components/inspection/EvidencePreviewGallery';
+import { useInspectionSync } from '@/context/InspectionSyncContext';
 import { useInspection } from '@/context/InspectionContext';
 import { useAuth } from '@/context/AuthContext';
 import { usePlaces } from '@/context/PlacesContext';
@@ -24,13 +25,18 @@ import {
   type StoredInspection,
 } from '@/storage/inspectionStorage';
 import { completeReinspection } from '@/storage/reinspectionStorage';
-import { uploadInspection } from '@/services/inspectionService';
+import {
+  getInspectionSyncErrorMessage,
+  syncStoredInspection,
+} from '@/services/inspectionSyncService';
 import { formatLocalDate, formatLocalDateTime } from '@/utils/dateTime';
 import { getInspectionTypeLabel } from '@/utils/inspectionDisplay';
+import { getNetworkAvailability } from '@/utils/networkState';
 
 export default function InspectionSummaryScreen() {
   const { profile } = useAuth();
   const { getPlaceById, refreshPlaces } = usePlaces();
+  const { isOnline } = useInspectionSync();
   const { tour } = useLocalSearchParams<{
     tour?: string;
   }>();
@@ -259,21 +265,35 @@ export default function InspectionSummaryScreen() {
         ...scope,
       });
 
-      const completedReinspection = draftInspection.reinspectionId
-        ? await completeReinspection(
-            draftInspection.reinspectionId,
-            saved.id,
-            scope
-          )
-        : undefined;
+      if (draftInspection.reinspectionId) {
+        await completeReinspection(
+          draftInspection.reinspectionId,
+          saved.id,
+          scope
+        );
+      }
 
-      let synced = true;
-      try {
-        await uploadInspection(saved, scope, completedReinspection);
-        await refreshPlaces();
-      } catch (uploadError) {
-        synced = false;
-        console.error('Inspection upload deferred:', uploadError);
+      let synced = false;
+      let savedOffline = false;
+      let syncError: unknown;
+      const networkAvailable = await getNetworkAvailability();
+
+      if (networkAvailable === false) {
+        savedOffline = true;
+      } else {
+        try {
+          await syncStoredInspection(saved.id, scope);
+          synced = true;
+          try {
+            await refreshPlaces();
+          } catch {
+            // The remote inspection is already synchronized. Place data will
+            // refresh on the next normal context refresh.
+          }
+        } catch (error) {
+          syncError = error;
+          savedOffline = (await getNetworkAvailability()) === false;
+        }
       }
 
       console.log(
@@ -282,10 +302,16 @@ export default function InspectionSummaryScreen() {
       );
 
       Alert.alert(
-        'Inspection Saved',
+        synced
+          ? 'Inspection Saved'
+          : savedOffline
+            ? 'Saved on device'
+            : 'Synchronization Failed',
         synced
           ? 'The inspection was saved and synchronized.'
-          : 'The inspection was saved on this device and will remain marked for synchronization.',
+          : savedOffline
+            ? 'This inspection is stored locally and will sync automatically when an internet connection is available.'
+            : getInspectionSyncErrorMessage(syncError),
         [
           {
             text: 'OK',
@@ -308,12 +334,7 @@ export default function InspectionSummaryScreen() {
           cancelable: false,
         }
       );
-    } catch (error) {
-      console.error(
-        'SAVE ERROR:',
-        error
-      );
-
+    } catch {
       Alert.alert(
         'Save Failed',
         'The inspection could not be saved. Please try again.'
@@ -760,7 +781,12 @@ export default function InspectionSummaryScreen() {
           </Text>
         </Pressable>
 
-        <View style={styles.offlineCard}>
+        <View
+          style={[
+            styles.offlineCard,
+            isOnline === false && styles.offlineCardActive,
+          ]}
+        >
           <Ionicons
             name="cloud-offline-outline"
             size={20}
@@ -768,9 +794,9 @@ export default function InspectionSummaryScreen() {
           />
 
           <Text style={styles.offlineText}>
-            This inspection will be stored on
-            this device with Pending sync
-            status.
+            {isOnline === false
+              ? 'You are offline. Saving will keep this inspection on the device and it will sync automatically when connectivity returns.'
+              : 'If a connection is unavailable, this inspection will remain safely stored on the device until automatic synchronization can run.'}
           </Text>
         </View>
       </ScrollView>
@@ -1050,6 +1076,10 @@ const styles = StyleSheet.create({
     padding: 13,
     borderRadius: 12,
     backgroundColor: '#FFFFFF',
+  },
+
+  offlineCardActive: {
+    backgroundColor: '#F1ECE5',
   },
 
   offlineText: {

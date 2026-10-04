@@ -42,6 +42,7 @@ import {
   getInspectionTypeLabel,
   isLinkedReinspection,
 } from '@/utils/inspectionDisplay';
+import { getRiskClassification } from '@/utils/riskClassification';
 
 export default function PlaceDetailsScreen() {
   const { getPlaceById, isLoading } = usePlaces();
@@ -84,7 +85,7 @@ export default function PlaceDetailsScreen() {
     {
       title: 'Place Overview',
       description:
-        'This section shows the selected household or place, its type, current inspection status, and risk level.',
+        'This section shows the selected household or place, its type, current inspection status, and risk classification availability.',
       ref: profileRef,
       y: profileY,
     },
@@ -98,7 +99,7 @@ export default function PlaceDetailsScreen() {
     {
       title: 'Inspection Status',
       description:
-        'Check the current sanitary inspection status, risk level, and previous inspection date.',
+        'Check the current sanitary inspection status, risk classification availability, and previous inspection date.',
       ref: inspectionRef,
       y: inspectionY,
     },
@@ -322,6 +323,7 @@ export default function PlaceDetailsScreen() {
 
   const isHousehold =
     place.placeType === 'Household / Residence';
+  const riskClassification = getRiskClassification();
 
   return (
     <View style={styles.screen}>
@@ -395,7 +397,7 @@ export default function PlaceDetailsScreen() {
             </View>
 
             <Text style={styles.riskText}>
-              {place.riskLevel} Risk
+              {riskClassification.label}
             </Text>
           </View>
         </View>
@@ -479,7 +481,7 @@ export default function PlaceDetailsScreen() {
             <InfoRow
               icon="warning-outline"
               label="Risk Level"
-              value={`${place.riskLevel} Risk`}
+              value={riskClassification.label}
             />
 
             <View style={styles.divider} />

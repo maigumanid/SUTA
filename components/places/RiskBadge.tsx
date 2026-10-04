@@ -1,51 +1,15 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { RADIUS } from '@/constants/theme';
-import { RiskLevel } from '@/types/place';
+import { COLORS, RADIUS } from '@/constants/theme';
+import { getRiskClassification } from '@/utils/riskClassification';
 
-type RiskBadgeProps = {
-  level: RiskLevel;
-};
-
-export default function RiskBadge({ level }: RiskBadgeProps) {
-  const getBadgeStyle = () => {
-    switch (level) {
-      case 'Low':
-        return {
-          backgroundColor: '#E8F3EC',
-          textColor: 'compliant',
-        };
-
-      case 'Medium':
-        return {
-          backgroundColor: '#FFF4DD',
-          textColor: 'warning',
-        };
-
-      case 'High':
-        return {
-          backgroundColor: 'riskHighSoft',
-          textColor: 'riskHigh',
-        };
-    }
-  };
-
-  const badgeStyle = getBadgeStyle();
+export default function RiskBadge() {
+  const classification = getRiskClassification();
 
   return (
-    <View
-      style={[
-        styles.badge,
-        { backgroundColor: badgeStyle.backgroundColor },
-      ]}
-    >
-      <Text
-        style={[
-          styles.text,
-          { color: badgeStyle.textColor },
-        ]}
-      >
-        {level} Risk
+    <View style={styles.badge}>
+      <Text style={styles.text}>
+        {classification.label}
       </Text>
     </View>
   );
@@ -57,10 +21,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: RADIUS.md,
+    backgroundColor: COLORS.neutralSoft,
   },
 
   text: {
     fontSize: 12,
     fontWeight: '700',
+    color: COLORS.neutral,
   },
 });

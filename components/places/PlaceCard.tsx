@@ -54,7 +54,7 @@ export default function PlaceCard({
           </Text>
         </View>
 
-        <RiskBadge level={place.riskLevel} />
+        <RiskBadge />
       </View>
 
       <View style={styles.infoRow}>

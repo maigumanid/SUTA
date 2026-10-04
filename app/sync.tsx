@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -12,6 +13,7 @@ import {
   View,
 } from 'react-native';
 
+import AppButton from '@/components/common/AppButton';
 import {
   COLORS,
   RADIUS,
@@ -20,6 +22,8 @@ import {
 
 import { usePlaces } from '@/context/PlacesContext';
 import { useAuth } from '@/context/AuthContext';
+import { useInspectionSync } from '@/context/InspectionSyncContext';
+import { getInspectionSyncErrorMessage } from '@/services/inspectionSyncService';
 
 import {
   getStoredInspections,
@@ -31,15 +35,39 @@ import {
   getInspectionTypeLabel,
 } from '@/utils/inspectionDisplay';
 
+type SyncFilter = 'all' | StoredInspection['syncStatus'];
+
+const FILTERS: { label: string; value: SyncFilter }[] = [
+  { label: 'All', value: 'all' },
+  { label: 'Failed', value: 'failed' },
+  { label: 'Pending', value: 'pending' },
+  { label: 'Synced', value: 'synced' },
+];
+
+const STATUS_PRIORITY: Record<StoredInspection['syncStatus'], number> = {
+  failed: 0,
+  pending: 1,
+  synced: 2,
+};
+
 export default function SyncScreen() {
   const { profile } = useAuth();
+  const {
+    isSyncing,
+    retryInspection,
+    syncRevision,
+    syncingInspectionIds,
+  } = useInspectionSync();
   const [inspections, setInspections] =
     useState<StoredInspection[]>([]);
+  const [filter, setFilter] = useState<SyncFilter>('all');
 
   const [isLoading, setIsLoading] =
     useState(true);
 
   const [isRefreshing, setIsRefreshing] =
+    useState(false);
+  const [isRetryingAll, setIsRetryingAll] =
     useState(false);
 
   const loadInspections = useCallback(async () => {
@@ -93,6 +121,107 @@ export default function SyncScreen() {
         inspection.syncStatus ===
         'failed'
     ).length;
+
+  const visibleInspections = useMemo(
+    () =>
+      inspections
+        .filter(
+          (inspection) =>
+            filter === 'all' || inspection.syncStatus === filter
+        )
+        .sort((left, right) => {
+          if (filter === 'all') {
+            const priorityDifference =
+              STATUS_PRIORITY[left.syncStatus] -
+              STATUS_PRIORITY[right.syncStatus];
+            if (priorityDifference !== 0) {
+              return priorityDifference;
+            }
+          }
+
+          const leftTime = Date.parse(left.savedAt);
+          const rightTime = Date.parse(right.savedAt);
+          return (
+            (Number.isNaN(rightTime) ? 0 : rightTime) -
+            (Number.isNaN(leftTime) ? 0 : leftTime)
+          );
+        }),
+    [filter, inspections]
+  );
+
+  useEffect(() => {
+    if (syncRevision > 0) {
+      void loadInspections();
+    }
+  }, [loadInspections, syncRevision]);
+
+  const handleRetry = async (inspection: StoredInspection) => {
+    try {
+      await retryInspection(inspection.id);
+      await loadInspections();
+      Alert.alert(
+        'Inspection Synchronized',
+        'The inspection and its evidence were synchronized successfully.'
+      );
+    } catch (error) {
+      await loadInspections();
+      Alert.alert(
+        'Synchronization Failed',
+        getInspectionSyncErrorMessage(error)
+      );
+    }
+  };
+
+  const handleRetryAll = async () => {
+    const failedInspections = inspections
+      .filter((inspection) => inspection.syncStatus === 'failed')
+      .sort((left, right) => {
+        const leftTime = Date.parse(left.savedAt);
+        const rightTime = Date.parse(right.savedAt);
+        return (
+          (Number.isNaN(leftTime) ? 0 : leftTime) -
+          (Number.isNaN(rightTime) ? 0 : rightTime)
+        );
+      });
+
+    if (failedInspections.length === 0 || isRetryingAll) {
+      return;
+    }
+
+    setIsRetryingAll(true);
+    let succeeded = 0;
+    let failed = 0;
+
+    try {
+      for (const inspection of failedInspections) {
+        try {
+          await retryInspection(inspection.id);
+          succeeded += 1;
+        } catch {
+          failed += 1;
+        }
+      }
+
+      await loadInspections();
+
+      Alert.alert(
+        failed === 0
+          ? 'Inspections Synchronized'
+          : 'Synchronization Finished',
+        failed === 0
+          ? `${succeeded} ${succeeded === 1 ? 'inspection was' : 'inspections were'} synchronized.`
+          : `${succeeded} synchronized and ${failed} remain failed. Local records and evidence were kept.`
+      );
+    } catch (error) {
+      await loadInspections();
+      Alert.alert(
+        'Synchronization Failed',
+        getInspectionSyncErrorMessage(error)
+      );
+    } finally {
+      setIsRetryingAll(false);
+    }
+  };
 
   return (
     <View style={styles.screen}>
@@ -200,6 +329,12 @@ export default function SyncScreen() {
 
             <View style={styles.statusRow}>
               <StatusCount
+                label="Failed"
+                count={failedCount}
+                icon="alert-circle-outline"
+              />
+
+              <StatusCount
                 label="Pending"
                 count={pendingCount}
                 icon="time-outline"
@@ -210,14 +345,19 @@ export default function SyncScreen() {
                 count={syncedCount}
                 icon="checkmark-circle-outline"
               />
-
-              <StatusCount
-                label="Failed"
-                count={failedCount}
-                icon="alert-circle-outline"
-              />
             </View>
           </View>
+
+          {failedCount > 0 && (
+            <AppButton
+              title="Retry All"
+              onPress={() => {
+                void handleRetryAll();
+              }}
+              loading={isRetryingAll}
+              disabled={isSyncing || syncingInspectionIds.size > 0}
+            />
+          )}
 
           <View>
             <Text
@@ -235,7 +375,39 @@ export default function SyncScreen() {
             </Text>
           </View>
 
-          {inspections.length === 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filters}
+          >
+            {FILTERS.map((item) => {
+              const selected = filter === item.value;
+              return (
+                <Pressable
+                  key={item.value}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  onPress={() => setFilter(item.value)}
+                  style={({ pressed }) => [
+                    styles.filterChip,
+                    selected && styles.filterChipSelected,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterText,
+                      selected && styles.filterTextSelected,
+                    ]}
+                  >
+                    {item.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          {visibleInspections.length === 0 ? (
             <View style={styles.empty}>
               <View
                 style={styles.emptyIcon}
@@ -250,20 +422,22 @@ export default function SyncScreen() {
               <Text
                 style={styles.emptyTitle}
               >
-                No Local Inspections
+                {inspections.length === 0
+                  ? 'No Local Inspections'
+                  : `No ${filter === 'all' ? '' : `${filter} `}inspections`}
               </Text>
 
               <Text
                 style={styles.emptyText}
               >
-                Completed inspections saved
-                on this device will appear
-                here.
+                {inspections.length === 0
+                  ? 'Completed inspections saved on this device will appear here.'
+                  : 'Choose another filter to view local inspection records.'}
               </Text>
             </View>
           ) : (
             <View style={styles.records}>
-              {inspections.map(
+              {visibleInspections.map(
                 (inspection) => (
                   <InspectionCard
                     key={inspection.id}
@@ -274,6 +448,15 @@ export default function SyncScreen() {
                       (candidate) =>
                         candidate.placeId === inspection.placeId
                     )}
+                    isRetrying={syncingInspectionIds.has(inspection.id)}
+                    retryDisabled={
+                      isSyncing ||
+                      isRetryingAll ||
+                      syncingInspectionIds.size > 0
+                    }
+                    onRetry={() => {
+                      void handleRetry(inspection);
+                    }}
                   />
                 )
               )}
@@ -301,9 +484,10 @@ export default function SyncScreen() {
                 {pendingCount === 1
                   ? 'inspection is'
                   : 'inspections are'}{' '}
-                waiting to be synchronized.
-                The records are safely stored
-                on this device.
+                waiting for a connection and
+                will sync automatically when
+                online. The records are safely
+                stored on this device.
               </Text>
             </View>
           )}
@@ -318,7 +502,7 @@ export default function SyncScreen() {
               <Text style={styles.failedNoticeText}>
                 {failedCount}{' '}
                 {failedCount === 1 ? 'inspection remains' : 'inspections remain'}{' '}
-                stored on this device but did not synchronize. Automatic retry is not available yet.
+                stored on this device after synchronization failed. Use Retry Sync to try again.
               </Text>
             </View>
           )}
@@ -331,9 +515,15 @@ export default function SyncScreen() {
 function InspectionCard({
   inspection,
   placeHistory,
+  isRetrying,
+  retryDisabled,
+  onRetry,
 }: {
   inspection: StoredInspection;
   placeHistory: StoredInspection[];
+  isRetrying: boolean;
+  retryDisabled: boolean;
+  onRetry: () => void;
 }) {
   const { getPlaceById } = usePlaces();
   const place =
@@ -452,6 +642,32 @@ function InspectionCard({
         value={savedDate}
       />
 
+      {inspection.syncStatus === 'pending' && (
+        <View style={styles.syncExplanation}>
+          <Text style={styles.syncExplanationTitle}>
+            Waiting for connection
+          </Text>
+          <Text style={styles.syncExplanationText}>
+            Will sync automatically when online.
+          </Text>
+        </View>
+      )}
+
+      {inspection.syncStatus === 'failed' && (
+        <Text style={styles.syncFailureText}>
+          Synchronization failed
+        </Text>
+      )}
+
+      {inspection.syncStatus === 'failed' && (
+        <AppButton
+          title="Retry Sync"
+          onPress={onRetry}
+          loading={isRetrying}
+          disabled={retryDisabled}
+          style={styles.retryButton}
+        />
+      )}
     </View>
   );
 }
@@ -703,6 +919,37 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
 
+  filters: {
+    gap: SPACING.sm,
+    paddingRight: SPACING.lg,
+  },
+
+  filterChip: {
+    minWidth: 76,
+    alignItems: 'center',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.pill,
+    backgroundColor: COLORS.surface,
+  },
+
+  filterChipSelected: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary,
+  },
+
+  filterText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+  },
+
+  filterTextSelected: {
+    color: COLORS.white,
+  },
+
   records: {
     gap: SPACING.md,
   },
@@ -780,6 +1027,37 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'right',
     color: COLORS.text,
+  },
+
+  syncExplanation: {
+    marginTop: SPACING.md,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.warningSoft,
+  },
+
+  syncExplanationTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.warningDark,
+  },
+
+  syncExplanationText: {
+    marginTop: 2,
+    fontSize: 11,
+    lineHeight: 16,
+    color: COLORS.warningDark,
+  },
+
+  syncFailureText: {
+    marginTop: SPACING.md,
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.violation,
+  },
+
+  retryButton: {
+    marginTop: SPACING.md,
   },
 
   pendingNotice: {

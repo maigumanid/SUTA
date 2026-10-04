@@ -9,6 +9,7 @@ import {
 import { InspectionProvider } from '@/context/InspectionContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { PlacesProvider } from '@/context/PlacesContext';
+import { InspectionSyncProvider } from '@/context/InspectionSyncContext';
 import { COLORS } from '@/constants/theme';
 
 export default function RootLayout() {
@@ -20,10 +21,12 @@ export default function RootLayout() {
       >
         <AuthProvider>
           <PlacesProvider>
-            <InspectionProvider>
-              <StatusBar style="dark" />
-              <RootNavigator />
-            </InspectionProvider>
+            <InspectionSyncProvider>
+              <InspectionProvider>
+                <StatusBar style="dark" />
+                <RootNavigator />
+              </InspectionProvider>
+            </InspectionSyncProvider>
           </PlacesProvider>
         </AuthProvider>
       </SafeAreaView>

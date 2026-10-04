@@ -33,7 +33,9 @@ function assertMatchingReinspection(
     existing.bsiUid !== record.bsiUid ||
     existing.barangayId !== record.barangayId ||
     existing.originalInspectionId !== record.originalInspectionId ||
-    existing.placeId !== record.placeId
+    existing.placeId !== record.placeId ||
+    (existing.status === 'completed' &&
+      existing.completedInspectionId !== record.completedInspectionId)
   ) {
     throw new SupabaseServiceError(
       'Ensure reinspection schedule',
