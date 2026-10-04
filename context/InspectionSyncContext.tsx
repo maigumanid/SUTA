@@ -47,8 +47,10 @@ export function InspectionSyncProvider({ children }: PropsWithChildren) {
   );
   const activeScopeKey = useRef<string | null>(null);
 
-  const bsiUid = profile?.uid;
-  const barangayId = profile?.assignedBarangayId;
+  const bsiUid = profile?.role === 'bsi' ? profile.uid : undefined;
+  const barangayId = profile?.role === 'bsi'
+    ? profile.assignedBarangayId
+    : undefined;
 
   const getActiveScope = useCallback((): InspectionScope => {
     if (!bsiUid || !barangayId) {

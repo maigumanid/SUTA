@@ -25,6 +25,7 @@ import {
   getInspectionResultLabel,
   getInspectionTypeLabel,
 } from '@/utils/inspectionDisplay';
+import { calculateInspectionRisk, getRiskClassification } from '@/utils/riskClassification';
 
 export default function InspectionDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -93,6 +94,7 @@ export default function InspectionDetailsScreen() {
   const water = inspection.safeWaterSupply;
   const sanitation = inspection.sanitationFacility;
   const inspectionType = getInspectionTypeLabel(inspection, placeHistory);
+  const risk = calculateInspectionRisk(inspection);
   const relationship = inspection.reinspectionOfInspectionId
     ? 'Follow-up linked to an earlier inspection'
     : placeHistory.some(
@@ -136,6 +138,10 @@ export default function InspectionDetailsScreen() {
           <DetailRow
             label="Result"
             value={getInspectionResultLabel(inspection.result)}
+          />
+          <DetailRow
+            label="Risk Level"
+            value={`${getRiskClassification(risk.level).label}${risk.percentage === null ? '' : ` (${Math.round(risk.percentage)}%)`}`}
           />
           <DetailRow label="Relationship" value={relationship} />
           <DetailRow label="Sync Status" value={formatSyncStatus(inspection)} last />

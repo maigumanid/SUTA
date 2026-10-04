@@ -16,16 +16,16 @@ import {
   requireSupabase,
   supabaseClient,
 } from '@/services/supabase';
-import { loadSupabaseBsiProfile } from '@/services/supabaseProfileService';
+import { loadSupabaseProfile } from '@/services/supabaseProfileService';
 import {
   SupabaseServiceError,
   throwSupabaseServiceError,
 } from '@/services/supabaseServiceError';
 import {
-  cacheBsiProfile,
-  getCachedBsiProfile,
+  cacheProfile,
+  getCachedProfile,
 } from '@/storage/profileStorage';
-import type { BsiProfile } from '@/types/inspector';
+import type { AppProfile } from '@/types/inspector';
 
 export type AuthUser = {
   email?: string;
@@ -34,10 +34,11 @@ export type AuthUser = {
 
 type AuthContextValue = {
   user: AuthUser | null;
-  profile: BsiProfile | null;
+  profile: AppProfile | null;
   isLoading: boolean;
   configurationReady: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  refreshProfile: () => Promise<void>;
+  signIn: (email: string, password: string) => Promise<AppProfile>;
   signOut: () => Promise<void>;
 };
 
@@ -55,19 +56,21 @@ function isInvalidProfileError(error: unknown) {
     error instanceof SupabaseServiceError &&
     (error.code === 'PROFILE_NOT_FOUND' ||
       error.code === 'PROFILE_INVALID' ||
-      error.code === 'AUTH_REQUIRED')
+      error.code === 'AUTH_REQUIRED' ||
+      error.code === 'ACCOUNT_INACTIVE')
   );
 }
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [profile, setProfile] = useState<BsiProfile | null>(null);
+  const [profile, setProfile] = useState<AppProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const hydrationId = useRef(0);
 
   const hydrateUser = useCallback(async (
     nextUser: User | null,
-    allowCachedProfile = true
+    allowCachedProfile = true,
+    silently = false
   ) => {
     const currentHydration = ++hydrationId.current;
 
@@ -79,10 +82,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
 
     setUser(mapAuthUser(nextUser));
-    setIsLoading(true);
+    if (!silently) setIsLoading(true);
 
     const cachedProfile = allowCachedProfile
-      ? await getCachedBsiProfile(nextUser.id)
+      ? await getCachedProfile(nextUser.id)
       : null;
     if (currentHydration !== hydrationId.current) return;
 
@@ -92,10 +95,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
 
     try {
-      const liveProfile = await loadSupabaseBsiProfile();
+      const loadedProfile = await loadSupabaseProfile();
+      const liveProfile: AppProfile = {
+        ...loadedProfile,
+        mustChangePassword:
+          loadedProfile.mustChangePassword ||
+          nextUser.user_metadata.must_change_password === true,
+      };
       if (currentHydration !== hydrationId.current) return;
 
-      await cacheBsiProfile(liveProfile);
+      await cacheProfile(liveProfile);
       if (currentHydration !== hydrationId.current) return;
 
       setProfile(liveProfile);
@@ -107,13 +116,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
         setProfile(null);
         await supabaseClient?.auth.signOut();
       } else {
-        console.error('Unable to refresh the BSI profile:', error);
-        if (!cachedProfile) {
+        console.error('Unable to refresh the account profile:', error);
+        if (!cachedProfile && !silently) {
           setProfile(null);
         }
       }
     } finally {
-      if (currentHydration === hydrationId.current) {
+      if (!silently && currentHydration === hydrationId.current) {
         setIsLoading(false);
       }
     }
@@ -154,12 +163,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
       Platform.OS === 'web'
         ? null
         : AppState.addEventListener('change', (state) => {
-            if (state === 'active') {
-              client.auth.startAutoRefresh();
-            } else {
-              client.auth.stopAutoRefresh();
-            }
-          });
+          if (state === 'active') {
+            client.auth.startAutoRefresh();
+            void client.auth.getUser().then(({ data, error }) => {
+              if (!error && active) {
+                void hydrateUser(data.user, false, true);
+              }
+            });
+          } else {
+            client.auth.stopAutoRefresh();
+          }
+        });
 
     if (Platform.OS !== 'web') {
       client.auth.startAutoRefresh();
@@ -182,6 +196,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
       profile,
       isLoading,
       configurationReady: isSupabaseConfigured,
+      refreshProfile: async () => {
+        const client = requireSupabase();
+        const { data, error } = await client.auth.getUser();
+        if (error) {
+          throwSupabaseServiceError('Refresh profile', error);
+        }
+        await hydrateUser(data.user, false);
+      },
       signIn: async (email, password) => {
         const client = requireSupabase();
         const { data, error } = await client.auth.signInWithPassword({
@@ -202,10 +224,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
         }
 
         try {
-          const nextProfile = await loadSupabaseBsiProfile();
-          await cacheBsiProfile(nextProfile);
+          const loadedProfile = await loadSupabaseProfile();
+          const nextProfile: AppProfile = {
+            ...loadedProfile,
+            mustChangePassword:
+              loadedProfile.mustChangePassword ||
+              data.user.user_metadata.must_change_password === true,
+          };
+          await cacheProfile(nextProfile);
           setUser(mapAuthUser(data.user));
           setProfile(nextProfile);
+          return nextProfile;
         } catch (profileError) {
           await client.auth.signOut();
           setUser(null);
@@ -225,7 +254,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         setProfile(null);
       },
     }),
-    [isLoading, profile, user]
+    [hydrateUser, isLoading, profile, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

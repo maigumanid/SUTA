@@ -16,7 +16,7 @@ export type InspectionStatus =
   | 'For Reinspection'
   | 'Not Inspected';
 
-export type RiskLevel = 'Low' | 'Medium' | 'High';
+export type RiskLevel = 'Low' | 'Moderate' | 'High' | 'Unclassified';
 
 export type Place = {
   id: string;

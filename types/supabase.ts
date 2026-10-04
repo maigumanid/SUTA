@@ -14,38 +14,124 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_audit_log: {
+        Row: {
+          action: string
+          admin_user_id: string
+          after_values: Json
+          before_values: Json
+          created_at: string
+          id: number
+          target_bsi_user_id: string
+        }
+        Insert: {
+          action: string
+          admin_user_id: string
+          after_values?: Json
+          before_values?: Json
+          created_at?: string
+          id?: never
+          target_bsi_user_id: string
+        }
+        Update: {
+          action?: string
+          admin_user_id?: string
+          after_values?: Json
+          before_values?: Json
+          created_at?: string
+          id?: never
+          target_bsi_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_audit_log_admin_user_id_fkey"
+            columns: ["admin_user_id"]
+            isOneToOne: false
+            referencedRelation: "bsi_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_audit_log_target_bsi_user_id_fkey"
+            columns: ["target_bsi_user_id"]
+            isOneToOne: false
+            referencedRelation: "bsi_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bsi_profiles: {
         Row: {
-          assigned_barangay_id: string
-          assigned_barangay_name: string
+          active: boolean
+          assigned_barangay_id: string | null
+          assigned_barangay_name: string | null
           contact_number: string
           created_at: string
           email: string
           id: string
+          jurisdiction_name: string | null
+          must_change_password: boolean
           name: string
           role: string
           updated_at: string
         }
         Insert: {
-          assigned_barangay_id: string
-          assigned_barangay_name: string
+          active?: boolean
+          assigned_barangay_id?: string | null
+          assigned_barangay_name?: string | null
           contact_number: string
           created_at?: string
           email: string
           id: string
+          jurisdiction_name?: string | null
+          must_change_password?: boolean
           name: string
           role?: string
           updated_at?: string
         }
         Update: {
-          assigned_barangay_id?: string
-          assigned_barangay_name?: string
+          active?: boolean
+          assigned_barangay_id?: string | null
+          assigned_barangay_name?: string | null
           contact_number?: string
           created_at?: string
           email?: string
           id?: string
+          jurisdiction_name?: string | null
+          must_change_password?: boolean
           name?: string
           role?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bsi_profiles_barangay_directory_fk"
+            columns: ["assigned_barangay_id"]
+            isOneToOne: false
+            referencedRelation: "barangays"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      barangays: {
+        Row: {
+          active: boolean
+          created_at: string
+          display_name: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          display_name: string
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          display_name?: string
+          id?: string
           updated_at?: string
         }
         Relationships: []
@@ -65,6 +151,12 @@ export type Database = {
           reinspection_of_inspection_id: string | null
           remarks: string
           result: string
+          risk_critical_failure: boolean
+          risk_earned_points: number
+          risk_evaluated_items: number
+          risk_level: string
+          risk_maximum_points: number
+          risk_percentage: number | null
           safe_water_supply: Json
           sanitation_facility: Json
           synced_at: string
@@ -83,6 +175,12 @@ export type Database = {
           reinspection_of_inspection_id?: string | null
           remarks?: string
           result: string
+          risk_critical_failure?: boolean
+          risk_earned_points?: number
+          risk_evaluated_items?: number
+          risk_level?: string
+          risk_maximum_points?: number
+          risk_percentage?: number | null
           safe_water_supply: Json
           sanitation_facility: Json
           synced_at?: string
@@ -101,6 +199,12 @@ export type Database = {
           reinspection_of_inspection_id?: string | null
           remarks?: string
           result?: string
+          risk_critical_failure?: boolean
+          risk_earned_points?: number
+          risk_evaluated_items?: number
+          risk_level?: string
+          risk_maximum_points?: number
+          risk_percentage?: number | null
           safe_water_supply?: Json
           sanitation_facility?: Json
           synced_at?: string
@@ -189,6 +293,13 @@ export type Database = {
           updated_by_uid?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "places_barangay_directory_fk"
+            columns: ["barangay_id"]
+            isOneToOne: false
+            referencedRelation: "barangays"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "places_created_by_uid_fkey"
             columns: ["created_by_uid"]
@@ -281,6 +392,32 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_create_bsi_profile: {
+        Args: {
+          p_admin_user_id: string
+          p_assigned_barangay_id: string
+          p_assigned_barangay_name: string
+          p_contact_number: string
+          p_email: string
+          p_name: string
+          p_target_user_id: string
+        }
+        Returns: Database["public"]["Tables"]["bsi_profiles"]["Row"]
+      }
+      admin_update_bsi_profile: {
+        Args: {
+          p_action: string
+          p_admin_user_id: string
+          p_assigned_barangay_id?: string
+          p_assigned_barangay_name?: string
+          p_target_user_id: string
+        }
+        Returns: Database["public"]["Tables"]["bsi_profiles"]["Row"]
+      }
+      complete_password_change: {
+        Args: { p_user_id: string }
+        Returns: Database["public"]["Tables"]["bsi_profiles"]["Row"]
+      }
       submit_inspection: {
         Args: {
           p_findings: Json
@@ -311,6 +448,12 @@ export type Database = {
           reinspection_of_inspection_id: string | null
           remarks: string
           result: string
+          risk_critical_failure: boolean
+          risk_earned_points: number
+          risk_evaluated_items: number
+          risk_level: string
+          risk_maximum_points: number
+          risk_percentage: number | null
           safe_water_supply: Json
           sanitation_facility: Json
           synced_at: string

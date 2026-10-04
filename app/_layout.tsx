@@ -46,6 +46,9 @@ function RootNavigator() {
   }
 
   const isAuthenticated = Boolean(user && profile);
+  const mustChangePassword = Boolean(profile?.mustChangePassword);
+  const isBsi = profile?.role === 'bsi' && !mustChangePassword;
+  const isAdmin = profile?.role === 'admin' && !mustChangePassword;
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
@@ -55,7 +58,11 @@ function RootNavigator() {
         <Stack.Screen name="login" />
       </Stack.Protected>
 
-      <Stack.Protected guard={isAuthenticated}>
+      <Stack.Protected guard={isAuthenticated && mustChangePassword}>
+        <Stack.Screen name="change-password" />
+      </Stack.Protected>
+
+      <Stack.Protected guard={isBsi}>
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="place/new" />
@@ -68,6 +75,13 @@ function RootNavigator() {
         <Stack.Screen name="inspection/evidence" />
         <Stack.Screen name="reinspection/[id]" />
         <Stack.Screen name="sync" />
+      </Stack.Protected>
+
+      <Stack.Protected guard={isAdmin}>
+        <Stack.Screen name="(admin)" />
+        <Stack.Screen name="admin/bsi/new" />
+        <Stack.Screen name="admin/bsi/[id]" />
+        <Stack.Screen name="admin/inspection/[id]" />
       </Stack.Protected>
     </Stack>
   );

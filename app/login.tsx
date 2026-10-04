@@ -47,7 +47,18 @@ export default function LoginScreen() {
 
   const handleLogin = async (data: LoginFormData) => {
     try {
-      await signIn(data.email, data.password);
+      const profile = await signIn(data.email, data.password);
+
+      if (profile.mustChangePassword) {
+        router.replace('/change-password');
+        return;
+      }
+
+      if (profile.role === 'admin') {
+        router.replace('/(admin)/admin-dashboard');
+        return;
+      }
+
       const onboardingComplete = await hasCompletedOnboarding();
 
       router.replace(
@@ -85,8 +96,7 @@ export default function LoginScreen() {
             </Text>
 
             <Text style={styles.description}>
-              Sign in with your inspector account to
-              continue field operations.
+              Sign in with your authorized sanitation account to continue.
             </Text>
           </View>
 
@@ -143,7 +153,7 @@ export default function LoginScreen() {
 
           <View style={styles.securityNotice}>
             <Text style={styles.securityTitle}>
-              AUTHORIZED BSI ACCESS ONLY
+              AUTHORIZED SANITATION PERSONNEL ONLY
             </Text>
 
             <Text style={styles.securityText}>

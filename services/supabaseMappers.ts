@@ -3,7 +3,7 @@ import type {
   BackendInspectionFinding,
   HouseholdInspection,
 } from '@/types/householdInspection';
-import type { BsiProfile } from '@/types/inspector';
+import type { AppProfile, BsiProfile } from '@/types/inspector';
 import {
   PLACE_TYPES,
   type InspectionStatus,
@@ -25,7 +25,12 @@ const INSPECTION_STATUSES: readonly InspectionStatus[] = [
   'For Reinspection',
   'Not Inspected',
 ];
-const RISK_LEVELS: readonly RiskLevel[] = ['Low', 'Medium', 'High'];
+const RISK_LEVELS: readonly RiskLevel[] = [
+  'Low',
+  'Moderate',
+  'High',
+  'Unclassified',
+];
 
 function requireText(value: string, field: string) {
   const trimmed = value.trim();
@@ -49,26 +54,41 @@ function isRiskLevel(value: string): value is RiskLevel {
 
 export function mapSupabaseProfile(
   row: Tables<'bsi_profiles'>
-): BsiProfile {
-  if (row.role !== 'BSI') {
-    throw new Error('The authenticated profile does not have the BSI role.');
+): AppProfile {
+  if (row.role !== 'bsi' && row.role !== 'admin') {
+    throw new Error('The authenticated profile has an unsupported role.');
   }
 
-  return {
+  const base = {
     uid: row.id,
     name: requireText(row.name, 'Profile name'),
     email: requireText(row.email, 'Profile email'),
     contactNumber: requireText(row.contact_number, 'Profile contact number'),
-    assignedBarangayId: requireText(
-      row.assigned_barangay_id,
-      'Assigned barangay ID'
-    ),
-    assignedBarangay: requireText(
-      row.assigned_barangay_name,
-      'Assigned barangay name'
-    ),
-    role: 'BSI',
+    assignedBarangayId: row.assigned_barangay_id ?? '',
+    assignedBarangay: row.assigned_barangay_name ?? '',
+    active: row.active,
+    mustChangePassword: row.must_change_password,
+    ...(row.jurisdiction_name
+      ? { jurisdictionName: row.jurisdiction_name }
+      : {}),
   };
+
+  if (row.role === 'bsi') {
+    return {
+      ...base,
+      assignedBarangayId: requireText(
+        row.assigned_barangay_id ?? '',
+        'Assigned barangay ID'
+      ),
+      assignedBarangay: requireText(
+        row.assigned_barangay_name ?? '',
+        'Assigned barangay name'
+      ),
+      role: 'bsi',
+    };
+  }
+
+  return { ...base, role: 'admin' };
 }
 
 export function mapSupabasePlace(row: SupabasePlaceRow): Place {

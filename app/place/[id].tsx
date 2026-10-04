@@ -323,7 +323,7 @@ export default function PlaceDetailsScreen() {
 
   const isHousehold =
     place.placeType === 'Household / Residence';
-  const riskClassification = getRiskClassification();
+  const riskClassification = getRiskClassification(place.riskLevel);
 
   return (
     <View style={styles.screen}>

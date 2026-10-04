@@ -32,6 +32,7 @@ import {
 import { formatLocalDate, formatLocalDateTime } from '@/utils/dateTime';
 import { getInspectionTypeLabel } from '@/utils/inspectionDisplay';
 import { getNetworkAvailability } from '@/utils/networkState';
+import { calculateInspectionRisk, getRiskClassification } from '@/utils/riskClassification';
 
 export default function InspectionSummaryScreen() {
   const { profile } = useAuth();
@@ -55,6 +56,7 @@ export default function InspectionSummaryScreen() {
   const place = draftInspection
     ? getPlaceById(draftInspection.placeId)
     : undefined;
+  const risk = draftInspection ? calculateInspectionRisk(draftInspection) : null;
 
   useEffect(() => {
     if (!draftInspection || !profile) {
@@ -681,9 +683,11 @@ export default function InspectionSummaryScreen() {
           <ReviewRow
             label="Result"
             value={getInspectionResult()}
-            last={
-              draftInspection.findings.length === 0
-            }
+          />
+          <ReviewRow
+            label="Risk Level"
+            value={risk ? `${getRiskClassification(risk.level).label}${risk.percentage === null ? '' : ` (${Math.round(risk.percentage)}%)`}` : 'Not yet classified'}
+            last={draftInspection.findings.length === 0}
           />
 
           {draftInspection.findings.length === 0 ? (

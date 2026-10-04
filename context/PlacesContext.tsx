@@ -32,12 +32,12 @@ export function PlacesProvider({ children }: PropsWithChildren) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const activeScopeKey = useRef<string | null>(null);
-  activeScopeKey.current = profile
+  activeScopeKey.current = profile?.role === 'bsi'
     ? `${profile.uid}:${profile.assignedBarangayId}`
     : null;
 
   const refreshPlaces = useCallback(async () => {
-    if (!profile) {
+    if (!profile || profile.role !== 'bsi') {
       setPlaces([]);
       setIsLoading(false);
       return;
@@ -69,7 +69,7 @@ export function PlacesProvider({ children }: PropsWithChildren) {
   }, [profile]);
 
   useEffect(() => {
-    if (!profile) {
+    if (!profile || profile.role !== 'bsi') {
       setPlaces([]);
       setIsLoading(false);
       return;
@@ -78,6 +78,9 @@ export function PlacesProvider({ children }: PropsWithChildren) {
     let active = true;
     setIsLoading(true);
     setError(null);
+    // Never retain a previous account/barangay's in-memory list while the
+    // newly scoped cache and RLS-backed refresh are loading.
+    setPlaces([]);
 
     void (async () => {
       const cached = await getCachedPlaces(

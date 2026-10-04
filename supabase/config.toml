@@ -5,3 +5,9 @@ enabled = false
 
 [experimental.pgdelta]
 enabled = true
+
+[functions.admin-manage-bsi]
+verify_jwt = false
+
+[functions.complete-password-change]
+verify_jwt = false

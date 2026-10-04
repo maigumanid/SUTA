@@ -4,9 +4,12 @@ import {
   ReactNode,
   type SetStateAction,
   useContext,
+  useEffect,
+  useRef,
   useState,
 } from 'react';
 
+import { useAuth } from '@/context/AuthContext';
 import { HouseholdInspection } from '@/types/householdInspection';
 
 type InspectionContextType = {
@@ -27,6 +30,11 @@ export function InspectionProvider({
 }: {
   children: ReactNode;
 }) {
+  const { profile } = useAuth();
+  const scopeKey = profile?.role === 'bsi'
+    ? `${profile.uid}:${profile.assignedBarangayId}`
+    : null;
+  const previousScopeKey = useRef(scopeKey);
   const [
     draftInspection,
     setDraftInspection,
@@ -37,6 +45,13 @@ export function InspectionProvider({
   const clearDraftInspection = () => {
     setDraftInspection(null);
   };
+
+  useEffect(() => {
+    if (previousScopeKey.current !== scopeKey) {
+      setDraftInspection(null);
+      previousScopeKey.current = scopeKey;
+    }
+  }, [scopeKey]);
 
   return (
     <InspectionContext.Provider
