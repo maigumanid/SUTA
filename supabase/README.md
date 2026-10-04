@@ -1,7 +1,8 @@
 # SUTA Supabase backend
 
 This directory contains the version-controlled Supabase backend foundation.
-The Expo application remains Firebase-backed until a later migration phase.
+The Expo application uses Supabase for authentication, database access, and
+private inspection-evidence storage.
 
 ## Local validation
 

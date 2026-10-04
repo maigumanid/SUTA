@@ -280,7 +280,7 @@ function getRegistrationErrorMessage(error: unknown) {
     }
 
     if (error.message.includes('unavailable')) {
-      return 'Firebase is currently unavailable. Check your connection and try again.';
+      return 'The service is currently unavailable. Check your connection and try again.';
     }
 
     return error.message;
