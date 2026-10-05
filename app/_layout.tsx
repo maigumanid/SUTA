@@ -75,6 +75,7 @@ function RootNavigator() {
         <Stack.Screen name="inspection/evidence" />
         <Stack.Screen name="reinspection/[id]" />
         <Stack.Screen name="sync" />
+        <Stack.Screen name="reports" />
       </Stack.Protected>
 
       <Stack.Protected guard={isAdmin}>

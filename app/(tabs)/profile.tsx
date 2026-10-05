@@ -1,4 +1,5 @@
 import { Alert, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
 
 import AppButton from '@/components/common/AppButton';
 import ScreenContainer from '@/components/common/ScreenContainer';
@@ -37,7 +38,10 @@ export default function ProfileScreen() {
           <ProfileRow label="Role" value={profile?.role === 'bsi' ? 'BSI' : '—'} />
         </View>
 
-        <AppButton title="Log Out" variant="outline" onPress={handleLogout} />
+        <View style={styles.actions}>
+          <AppButton title="Reports" onPress={() => router.push('../reports')} />
+          <AppButton title="Log Out" variant="outline" onPress={handleLogout} />
+        </View>
       </View>
     </ScreenContainer>
   );
@@ -67,4 +71,5 @@ const styles = StyleSheet.create({
   row: { gap: SPACING.xs },
   label: { fontSize: 12, fontWeight: '700', color: COLORS.textMuted },
   value: { fontSize: 15, color: COLORS.text },
+  actions: { gap: SPACING.md },
 });

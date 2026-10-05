@@ -6,11 +6,14 @@ import AppButton from '@/components/common/AppButton';
 import EvidencePreviewGallery from '@/components/inspection/EvidencePreviewGallery';
 import ScreenContainer from '@/components/common/ScreenContainer';
 import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
 import { createEvidenceSignedUrl, fetchAdminInspectionDetail } from '@/services/adminService';
+import { fetchInspectionRecord } from '@/services/inspectionRecordService';
 import type { AdminInspectionDetail } from '@/types/admin';
 import type { EvidenceAttachment } from '@/types/householdInspection';
 import type { Json } from '@/types/supabase';
 import { formatLocalDate, formatLocalDateTime } from '@/utils/dateTime';
+import { shareInspectionRecordPdf } from '@/utils/inspectionRecordPdf';
 
 type FindingView = { category: string; details: string; evidence: { storagePath: string; fileName?: string; mimeType?: string; source?: 'camera' | 'library'; createdAt?: string }[] };
 
@@ -75,8 +78,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export default function AdminInspectionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { profile } = useAuth();
   const [detail, setDetail] = useState<AdminInspectionDetail | null>(null);
   const [evidence, setEvidence] = useState<Record<string, EvidenceAttachment[]>>({});
+  const [exporting, setExporting] = useState(false);
   const load = useCallback(async () => {
     if (!id) return;
     const next = await fetchAdminInspectionDetail(id); setDetail(next);
@@ -104,6 +109,21 @@ export default function AdminInspectionDetailScreen() {
   const waterSource = textValue(water, 'waterSourceType');
   const sanitaryFacility = textValue(sanitation, 'sanitaryFacilityType');
   const unsanitaryFacility = numberValue(sanitation, 'unsanitaryToiletType');
+  const exportRecord = async () => {
+    setExporting(true);
+    try {
+      const record = await fetchInspectionRecord(detail.id);
+      await shareInspectionRecordPdf(
+        record,
+        profile?.jurisdictionName ?? 'Municipal/City Sanitation Jurisdiction',
+        { generatedBy: 'admin' }
+      );
+    } catch (error) {
+      Alert.alert('Unable to Export Inspection Record', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <ScreenContainer><ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -138,6 +158,7 @@ export default function AdminInspectionDetailScreen() {
       <Section title="Remarks"><Text style={styles.body}>{detail.remarks || 'No remarks recorded.'}</Text></Section>
       <Section title="Location">{location ? <><DetailRow label="Coordinates" value={`${numberValue(location, 'latitude')?.toFixed(6) ?? 'Not recorded'}, ${numberValue(location, 'longitude')?.toFixed(6) ?? 'Not recorded'}`} /><DetailRow label="Captured" value={formatLocalDateTime(textValue(location, 'capturedAt'), 'Not recorded')} /></> : <Text style={styles.body}>No location was recorded.</Text>}</Section>
       <Section title="Reinspection"><Text style={styles.body}>{detail.inspectionType === 'reinspection' ? 'This is a linked follow-up inspection.' : detail.reinspectionStatus ? `Reinspection status: ${readable(detail.reinspectionStatus)}` : 'No reinspection is linked to this record.'}</Text></Section>
+      <AppButton title="Export Inspection Record" loading={exporting} onPress={() => void exportRecord()} />
       <AppButton title="Back to Inspections" variant="outline" onPress={() => router.back()} />
     </ScrollView></ScreenContainer>
   );

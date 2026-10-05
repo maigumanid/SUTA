@@ -3,6 +3,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,6 +16,7 @@ import EvidencePreviewGallery from '@/components/inspection/EvidencePreviewGalle
 import { COLORS, RADIUS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { usePlaces } from '@/context/PlacesContext';
+import { fetchInspectionRecord } from '@/services/inspectionRecordService';
 import {
   getStoredInspectionById,
   getStoredInspectionsForPlace,
@@ -26,6 +28,7 @@ import {
   getInspectionTypeLabel,
 } from '@/utils/inspectionDisplay';
 import { calculateInspectionRisk, getRiskClassification } from '@/utils/riskClassification';
+import { shareInspectionRecordPdf } from '@/utils/inspectionRecordPdf';
 
 export default function InspectionDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -36,6 +39,7 @@ export default function InspectionDetailsScreen() {
   const [placeHistory, setPlaceHistory] =
     useState<StoredInspection[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
 
   const load = useCallback(async () => {
     if (!profile) return;
@@ -103,6 +107,22 @@ export default function InspectionDetailsScreen() {
       )
       ? 'A completed follow-up is linked to this inspection'
       : 'No linked follow-up';
+
+  const exportRecord = async () => {
+    setIsExporting(true);
+    try {
+      const record = await fetchInspectionRecord(inspection.id);
+      await shareInspectionRecordPdf(
+        record,
+        profile?.jurisdictionName ?? profile?.assignedBarangay ?? 'Municipal/City Sanitation Jurisdiction',
+        { generatedBy: 'bsi', preparedBy: profile?.name ?? record.inspectorName }
+      );
+    } catch (error) {
+      Alert.alert('Unable to Export Inspection Record', inspection.syncStatus === 'synced' ? error instanceof Error ? error.message : 'Please try again.' : 'This inspection must synchronize before its official record can be exported with private evidence. The local record remains available.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   return (
     <View style={styles.screen}>
@@ -275,6 +295,8 @@ export default function InspectionDetailsScreen() {
             {inspection.remarks.trim() || 'No remarks recorded.'}
           </Text>
         </Section>
+
+        <AppButton title="Export Inspection Record" loading={isExporting} onPress={() => void exportRecord()} />
       </ScrollView>
     </View>
   );

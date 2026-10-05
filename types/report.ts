@@ -1,0 +1,23 @@
+import type { RiskLevel } from '@/types/place';
+import type { InspectionRecord } from '@/types/inspectionRecord';
+
+export type ReportKind = 'municipal_summary' | 'barangay_summary' | 'inspection_results' | 'priority_places' | 'reinspections' | 'bsi_activity';
+export type BsiReportKind = 'my_activity' | 'assigned_barangay_summary' | 'pending_reinspections';
+export type ReportLayoutKind = ReportKind | BsiReportKind;
+
+export type ReportFilters = { startDate?: string; endDate?: string; barangayId: string; bsiId: string; placeType: string; result: string; riskLevel: string; inspectionType: string; reinspectionStatus: string; accountStatus: string };
+export const DEFAULT_REPORT_FILTERS: ReportFilters = { barangayId: 'all', bsiId: 'all', placeType: 'all', result: 'all', riskLevel: 'all', inspectionType: 'all', reinspectionStatus: 'all', accountStatus: 'all' };
+
+export type ReportInspectionRow = { id: string; placeId: string; placeName: string; placeType: string; barangayId: string; barangayName: string; bsiId: string; bsiName: string; inspectionDate: string; inspectionType: 'Initial Inspection' | 'Inspection' | 'Reinspection'; result: string; riskLevel: RiskLevel; riskPercentage: number | null; reinspectionRequired: boolean; reinspectionStatus?: string; remarksSummary?: string };
+export type PriorityPlaceRow = { placeId: string; placeName: string; barangayName: string; placeType: string; status: string; riskLevel: RiskLevel; latestInspectionId?: string; latestInspectionDate?: string; latestRiskPercentage: number | null; inspectorName?: string; reinspectionStatus?: string; scheduledDate?: string; overdue: boolean; findingSummary?: string };
+export type RepeatedNonComplianceRow = { placeId: string; placeName: string; barangayName: string; occurrences: number; latestInspectionId: string; latestInspectionDate: string };
+export type ReinspectionReportRow = { id: string; placeName: string; barangayId: string; barangayName: string; bsiName: string; originalInspectionId: string; originalInspectionDate?: string; originalResult: string; originalRiskLevel: RiskLevel; originalRiskPercentage: number | null; scheduledDate: string; status: 'Pending' | 'Completed' | 'Overdue'; daysOverdue: number; completedDate?: string; completedInspectionId?: string; followUpDate?: string; followUpResult?: string };
+export type BsiActivityRow = { bsiId: string; name: string; barangayId: string; barangayName: string; active: boolean; inspections: number; compliant: number; nonCompliant: number; forReinspection: number; reinspectionsCompleted: number; pendingFollowUps: number; lastInspectionDate?: string };
+export type BarangayCoverageRow = { barangayId: string; barangayName: string; registeredPlaces: number; inspectionsInRange: number; compliant: number; nonCompliant: number; forReinspection: number; highRisk: number; pendingReinspections: number; overdueReinspections: number; activeBsis: number };
+export type ReportSummary = { totalBarangays: number; activeBarangaysWithInspections: number; totalRegisteredPlaces: number; inspectedPlaces: number; uninspectedPlaces: number; totalInspections: number; inspectionsInRange: number; initialInspections: number; regularInspections: number; reinspectionInspections: number; compliant: number; nonCompliant: number; forReinspection: number; lowRiskPlaces: number; moderateRiskPlaces: number; highRiskPlaces: number; unclassifiedRiskPlaces: number; pendingReinspections: number; overdueReinspections: number; completedReinspections: number; activeBsis: number; inactiveBsis: number; barangaysWithAssignedBsi: number; barangaysWithoutAssignedBsi: number; compliancePercentage: number | null; highRiskPercentage: number | null; reinspectionCompletionPercentage: number | null; barangayCoverage: BarangayCoverageRow[] };
+export type PaginatedReport<T> = { rows: T[]; total: number; page: number; pageSize: number };
+
+export type ReportMetric = { label: string; value: string };
+export type ReportLink = { kind: 'inspection' | 'bsi'; id: string };
+export type ReportSection = { title: string; columns: string[]; rows: string[][]; rowLinks?: (ReportLink | null)[]; emptyMessage?: string };
+export type ReportViewModel = { title: string; jurisdiction: string; officeLabel: string; reportingPeriod: string; generatedAt: string; scope: string[]; metrics: ReportMetric[]; highlights: string[]; sections: ReportSection[]; exportedCount?: number; totalCount?: number; orientation: 'portrait' | 'landscape'; inspectionRecords?: InspectionRecord[]; layoutKind?: ReportLayoutKind; includePhotoEvidence?: boolean; generatedBy: 'admin' | 'bsi'; preparedBy?: string };
