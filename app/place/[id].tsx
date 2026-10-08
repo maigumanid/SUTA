@@ -28,11 +28,19 @@ import TourOverlay, {
 import AppButton from '@/components/common/AppButton';
 import { COLORS, RADIUS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { useNetwork } from '@/context/NetworkContext';
 import { usePlaces } from '@/context/PlacesContext';
+import {
+  fetchInspectionHistoryForPlace,
+  type InspectionHistoryItem,
+  mergeInspectionHistory,
+} from '@/services/inspectionHistoryService';
+import { loadReinspections } from '@/services/reinspectionService';
 import {
   getStoredInspectionsForPlace,
   StoredInspection,
 } from '@/storage/inspectionStorage';
+import { getCachedInspectionHistoryForPlace } from '@/storage/inspectionHistoryCache';
 import {
   getReinspections,
   type ReinspectionRecord,
@@ -43,16 +51,16 @@ import {
   isLinkedReinspection,
 } from '@/utils/inspectionDisplay';
 import { getRiskClassification } from '@/utils/riskClassification';
+import { isReinspectionOverdue } from '@/utils/reinspection';
 
 export default function PlaceDetailsScreen() {
   const { getPlaceById, isLoading } = usePlaces();
   const { profile } = useAuth();
-  const { id, tour } = useLocalSearchParams<{
+  const { isOnline } = useNetwork();
+  const { id } = useLocalSearchParams<{
     id: string;
-    tour?: string;
   }>();
-
-  const isTourActive = tour === 'true';
+  const isTourActive = false;
 
   const [tourStep, setTourStep] = useState(0);
   const [tourTarget, setTourTarget] =
@@ -61,7 +69,7 @@ export default function PlaceDetailsScreen() {
   const [isProfileReady, setIsProfileReady] =
     useState(false);
   const [inspectionHistory, setInspectionHistory] =
-    useState<StoredInspection[]>([]);
+    useState<InspectionHistoryItem[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] =
     useState(true);
   const [historyError, setHistoryError] =
@@ -128,10 +136,32 @@ export default function PlaceDetailsScreen() {
         bsiUid: profile.uid,
         barangayId: profile.assignedBarangayId,
       };
-      const [records, reinspectionRecords] = await Promise.all([
+      const [localRecords, cachedRecords, localReinspections] = await Promise.all([
         getStoredInspectionsForPlace(id, scope),
+        getCachedInspectionHistoryForPlace(id, scope),
         getReinspections(scope),
       ]);
+      const deviceRecords = mergeInspectionHistory(localRecords, cachedRecords);
+      let records = deviceRecords;
+      let reinspectionRecords = localReinspections;
+      let refreshFailed = false;
+
+      if (isOnline !== false) {
+        try {
+          const serverRecords = await fetchInspectionHistoryForPlace(id, scope);
+          records = mergeInspectionHistory(deviceRecords, serverRecords);
+        } catch (error) {
+          console.error('Unable to refresh inspection history:', error);
+          refreshFailed = true;
+        }
+
+        try {
+          reinspectionRecords = await loadReinspections(scope, true);
+        } catch (error) {
+          console.error('Unable to refresh reinspection status:', error);
+          refreshFailed = true;
+        }
+      }
 
       const latestRequiredInspection = records.find(
         (inspection) => inspection.result === 'for_reinspection'
@@ -154,19 +184,23 @@ export default function PlaceDetailsScreen() {
 
       setInspectionHistory(records);
       setReinspection(matchingReinspection);
+      if (refreshFailed) {
+        setHistoryError(
+          'Some online records could not be refreshed. Check your connection and try again.'
+        );
+      }
     } catch (error) {
       console.error(
         'Unable to load inspection history:',
         error
       );
       setHistoryError(
-        'Inspection history could not be loaded from this device.'
+        'Inspection history could not be refreshed. Check your connection and try again.'
       );
-      setReinspection(null);
     } finally {
       setIsHistoryLoading(false);
     }
-  }, [id, profile]);
+  }, [id, isOnline, profile]);
 
   useFocusEffect(
     useCallback(() => {
@@ -236,7 +270,9 @@ export default function PlaceDetailsScreen() {
       tourStep === 0
     ) {
       const timer = setTimeout(() => {
-        showTourStep(0);
+        profileRef.current?.measureInWindow((x, y, width, height) => {
+          setTourTarget({ x, y, width, height });
+        });
       }, 300);
 
       return () => clearTimeout(timer);
@@ -245,6 +281,7 @@ export default function PlaceDetailsScreen() {
     isTourActive,
     isProfileReady,
     tourStep,
+    tourTarget,
   ]);
 
   const nextTourStep = () => {
@@ -558,7 +595,12 @@ export default function PlaceDetailsScreen() {
                       ? 'Required'
                       : reinspection.status === 'completed'
                         ? 'Completed'
-                        : 'Scheduled'}
+                        : isReinspectionOverdue(
+                            reinspection.scheduledDate,
+                            reinspection.status
+                          )
+                          ? 'Overdue'
+                          : 'Scheduled'}
                   </Text>
 
                   <Text style={styles.noticeText}>
@@ -566,7 +608,7 @@ export default function PlaceDetailsScreen() {
                       ? 'Not yet scheduled'
                       : reinspection.status === 'completed'
                         ? formatLocalDateTime(reinspection.completedAt)
-                        : `Scheduled for ${formatLocalDate(reinspection.scheduledDate)}`}
+                        : `${isReinspectionOverdue(reinspection.scheduledDate, reinspection.status) ? 'Overdue since' : 'Scheduled for'} ${formatLocalDate(reinspection.scheduledDate)}`}
                   </Text>
                 </View>
               </View>
@@ -641,7 +683,7 @@ export default function PlaceDetailsScreen() {
                 Loading inspection history...
               </Text>
             </View>
-          ) : historyError ? (
+          ) : historyError && inspectionHistory.length === 0 ? (
             <View style={styles.emptyHistory}>
               <View style={styles.emptyIcon}>
                 <Ionicons
@@ -688,6 +730,18 @@ export default function PlaceDetailsScreen() {
             </View>
           ) : (
             <View style={styles.historyList}>
+              {historyError ? (
+                <View style={styles.historyWarning}>
+                  <Ionicons
+                    name="cloud-offline-outline"
+                    size={18}
+                    color={COLORS.warning}
+                  />
+                  <Text style={styles.historyWarningText}>
+                    Showing records available on this device. Refresh again when connected.
+                  </Text>
+                </View>
+              ) : null}
               {inspectionHistory.map((inspection) => (
                 <InspectionHistoryCard
                   key={inspection.id}
@@ -783,9 +837,9 @@ function InfoRow({
 }
 
 type InspectionHistoryCardProps = {
-  inspection: StoredInspection;
-  originalInspection?: StoredInspection;
-  followUpInspection?: StoredInspection;
+  inspection: InspectionHistoryItem;
+  originalInspection?: InspectionHistoryItem;
+  followUpInspection?: InspectionHistoryItem;
   inspectionType: string;
   onPress: () => void;
 };
@@ -801,10 +855,13 @@ function InspectionHistoryCard({
   const result = getInspectionResultDetails(
     inspection.result
   );
+  const findingCount = 'findingCount' in inspection
+    ? inspection.findingCount
+    : inspection.findings.length;
   const findingLabel =
-    inspection.findings.length === 1
+    findingCount === 1
       ? '1 finding'
-      : `${inspection.findings.length} findings`;
+      : `${findingCount} findings`;
 
   let relationship: string | undefined;
 
@@ -883,7 +940,7 @@ function InspectionHistoryCard({
   );
 }
 
-function formatSyncStatus(status: StoredInspection['syncStatus']) {
+function formatSyncStatus(status: InspectionHistoryItem['syncStatus']) {
   switch (status) {
     case 'synced':
       return 'Synced';
@@ -1122,6 +1179,20 @@ const styles = StyleSheet.create({
 
   historyList: {
     gap: SPACING.sm,
+  },
+  historyWarning: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.warningSoft,
+  },
+  historyWarningText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    color: COLORS.text,
   },
 
   historyCardHeader: {

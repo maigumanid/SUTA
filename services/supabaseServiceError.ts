@@ -2,6 +2,8 @@ type ErrorDetails = {
   code?: string;
   message: string;
   status?: number;
+  details?: string;
+  hint?: string;
 };
 
 function isErrorRecord(value: unknown): value is Record<string, unknown> {
@@ -22,6 +24,8 @@ function readErrorDetails(error: unknown): ErrorDetails {
         : undefined;
 
   return {
+    ...(typeof error.details === 'string' ? { details: error.details } : {}),
+    ...(typeof error.hint === 'string' ? { hint: error.hint } : {}),
     message:
       typeof error.message === 'string'
         ? error.message
@@ -53,6 +57,8 @@ export class SupabaseServiceError extends Error {
   readonly operation: string;
   readonly retryable: boolean;
   readonly status?: number;
+  readonly details?: string;
+  readonly hint?: string;
 
   constructor(
     operation: string,
@@ -62,6 +68,8 @@ export class SupabaseServiceError extends Error {
       code?: string;
       retryable?: boolean;
       status?: number;
+      details?: string;
+      hint?: string;
     } = {}
   ) {
     super(`${operation}: ${message}`, { cause: options.cause });
@@ -69,6 +77,8 @@ export class SupabaseServiceError extends Error {
     this.operation = operation;
     this.code = options.code;
     this.status = options.status;
+    this.details = options.details;
+    this.hint = options.hint;
     this.retryable = options.retryable ?? false;
   }
 }
@@ -87,6 +97,8 @@ export function createSupabaseServiceError(
     code: details.code,
     retryable: isRetryable(error, details),
     status: details.status,
+    details: details.details,
+    hint: details.hint,
   });
 }
 

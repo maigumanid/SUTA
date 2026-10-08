@@ -19,26 +19,50 @@ import {
 } from 'react-native';
 
 import AppButton from '@/components/common/AppButton';
-import { COLORS, RADIUS, SPACING } from '@/constants/theme';
-import { usePlaces } from '@/context/PlacesContext';
+import ReinspectionCalendarAction from '@/components/reinspection/ReinspectionCalendarAction';
+import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { useNetwork } from '@/context/NetworkContext';
+import { usePlaces } from '@/context/PlacesContext';
+import {
+  fetchInspectionHistoryForPlace,
+  fetchStoredInspectionById,
+  mergeInspectionHistory,
+} from '@/services/inspectionHistoryService';
 import {
   getStoredInspectionById,
   getStoredInspections,
   StoredInspection,
 } from '@/storage/inspectionStorage';
 import {
-  getReinspectionById,
-  getReinspectionForInspection,
+  getCachedInspectionById,
+  getCachedInspectionHistoryForPlace,
+} from '@/storage/inspectionHistoryCache';
+import {
+  getReinspections,
   ReinspectionRecord,
   saveReinspectionSchedule,
 } from '@/storage/reinspectionStorage';
-import { uploadReinspection } from '@/services/reinspectionService';
+import {
+  loadReinspections,
+  uploadReinspection,
+} from '@/services/reinspectionService';
+import {
+  getReinspectionCalendarState,
+  saveReinspectionCalendarEvent,
+} from '@/services/reinspectionCalendarService';
 import { formatLocalDate, formatLocalDateTime } from '@/utils/dateTime';
+import { getInspectionResultLabel } from '@/utils/inspectionDisplay';
+import { isReinspectionOverdue } from '@/utils/reinspection';
+import {
+  calculateInspectionRisk,
+  getRiskClassification,
+} from '@/utils/riskClassification';
 
 export default function ReinspectionScreen() {
   const { getPlaceById } = usePlaces();
   const { profile } = useAuth();
+  const { isOnline } = useNetwork();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [source, setSource] =
     useState<StoredInspection | null>(null);
@@ -54,6 +78,12 @@ export default function ReinspectionScreen() {
     useState(true);
   const [isSaving, setIsSaving] =
     useState(false);
+  const [calendarRefreshToken, setCalendarRefreshToken] =
+    useState(0);
+  const [scheduleFeedback, setScheduleFeedback] = useState<{
+    message: string;
+    tone: 'success' | 'warning';
+  } | null>(null);
 
   const load = useCallback(async () => {
     if (!profile) return;
@@ -64,40 +94,73 @@ export default function ReinspectionScreen() {
       barangayId: profile.assignedBarangayId,
     };
 
-    let schedule = await getReinspectionById(id, scope);
-    let original = schedule
-      ? await getStoredInspectionById(
-          schedule.originalInspectionId,
-          scope
-        )
-      : await getStoredInspectionById(id, scope);
+    let schedules: ReinspectionRecord[];
+    try {
+      schedules = await loadReinspections(scope, isOnline !== false);
+    } catch (error) {
+      console.error('Unable to refresh reinspections:', error);
+      schedules = await getReinspections(scope);
+    }
 
-    if (!schedule && original) {
-      schedule =
-        await getReinspectionForInspection(
-          original.id,
+    let schedule = schedules.find((candidate) => candidate.id === id);
+    const sourceInspectionId = schedule?.originalInspectionId ?? id;
+    let original =
+      (await getStoredInspectionById(sourceInspectionId, scope)) ??
+      (await getCachedInspectionById(sourceInspectionId, scope));
+
+    if (!original && isOnline !== false) {
+      try {
+        original = await fetchStoredInspectionById(
+          schedule?.originalInspectionId ?? id,
           scope
         );
+      } catch (error) {
+        console.error('Unable to load reinspection source:', error);
+      }
     }
 
     if (!original) {
-      const inspections =
-        await getStoredInspections(scope);
-      original =
-        inspections.find(
-          (inspection) =>
-            inspection.placeId === id &&
-            inspection.result ===
-              'for_reinspection'
-        ) ?? null;
+      const [localInspections, cachedInspections] = await Promise.all([
+        getStoredInspections(scope).then((records) =>
+          records.filter((inspection) => inspection.placeId === id)
+        ),
+        getCachedInspectionHistoryForPlace(id, scope),
+      ]);
+      const deviceInspections = mergeInspectionHistory(
+        localInspections,
+        cachedInspections
+      );
+      let inspections = deviceInspections;
 
-      if (original) {
-        schedule =
-          await getReinspectionForInspection(
-            original.id,
-            scope
+      if (isOnline !== false) {
+        try {
+          inspections = mergeInspectionHistory(
+            deviceInspections,
+            await fetchInspectionHistoryForPlace(id, scope)
           );
+        } catch (error) {
+          console.error('Unable to load place reinspection history:', error);
+        }
       }
+
+      const candidate = inspections.find(
+        (inspection) => inspection.result === 'for_reinspection'
+      );
+      if (candidate && 'findings' in candidate) {
+        original = candidate;
+      } else if (candidate && isOnline !== false) {
+        try {
+          original = await fetchStoredInspectionById(candidate.id, scope);
+        } catch (error) {
+          console.error('Unable to load complete reinspection source:', error);
+        }
+      }
+    }
+
+    if (original && !schedule) {
+      schedule = schedules.find(
+        (candidate) => candidate.originalInspectionId === original?.id
+      );
     }
 
     setSource(original ?? null);
@@ -111,7 +174,7 @@ export default function ReinspectionScreen() {
     }
 
     setIsLoading(false);
-  }, [id, profile]);
+  }, [id, isOnline, profile]);
 
   useFocusEffect(
     useCallback(() => {
@@ -129,17 +192,20 @@ export default function ReinspectionScreen() {
       return;
     }
 
-    date.setHours(12, 0, 0, 0);
-    setSelectedDate(date);
+    const confirmedDate = new Date(date);
+    confirmedDate.setHours(12, 0, 0, 0);
+    setSelectedDate(confirmedDate);
     setHasChosenDate(true);
+    void saveSchedule(confirmedDate);
   };
 
-  const saveSchedule = async () => {
-    if (!source || !hasChosenDate || !profile) {
+  const saveSchedule = async (date: Date) => {
+    if (!source || !profile) {
       return;
     }
 
     setIsSaving(true);
+    setScheduleFeedback(null);
 
     try {
       const saved = await saveReinspectionSchedule({
@@ -147,18 +213,67 @@ export default function ReinspectionScreen() {
         barangayId: profile.assignedBarangayId,
         originalInspectionId: source.id,
         placeId: source.placeId,
-        scheduledDate: selectedDate.toISOString(),
+        scheduledDate: date.toISOString(),
       });
-      try {
-        await uploadReinspection(saved);
-      } catch (uploadError) {
-        console.error('Reinspection upload deferred:', uploadError);
-      }
       setRecord(saved);
-      Alert.alert(
-        'Reinspection Scheduled',
-        'The follow-up inspection schedule was saved on this device.'
-      );
+      const upload = uploadReinspection(saved).catch((uploadError) => {
+        console.error('Reinspection upload deferred:', uploadError);
+      });
+
+      let trackedCalendar = null;
+      try {
+        trackedCalendar = await getReinspectionCalendarState(
+          profile.uid,
+          saved.id
+        );
+      } catch (calendarStateError) {
+        console.error('Unable to read the tracked calendar event:', calendarStateError);
+        setScheduleFeedback({
+          message: 'Schedule updated. Calendar needs update.',
+          tone: 'warning',
+        });
+        setCalendarRefreshToken((current) => current + 1);
+        await upload;
+        return;
+      }
+
+      if (trackedCalendar) {
+        try {
+          const scheduledPlace = getPlaceById(saved.placeId);
+          await saveReinspectionCalendarEvent({
+            userId: profile.uid,
+            reinspectionId: saved.id,
+            scheduledDate: saved.scheduledDate,
+            placeName: scheduledPlace?.name ?? 'Scheduled place',
+            address: scheduledPlace
+              ? [scheduledPlace.purok, scheduledPlace.address]
+                  .filter(Boolean)
+                  .join(', ')
+              : undefined,
+            barangay: scheduledPlace?.barangay ?? profile.assignedBarangay,
+            originalResult: getInspectionResultLabel(source.result),
+            riskLevel: getRiskClassification(calculateInspectionRisk(source).level).label,
+          });
+          setScheduleFeedback({
+            message: 'Schedule and calendar updated.',
+            tone: 'success',
+          });
+        } catch (calendarError) {
+          console.error('Calendar update deferred:', calendarError);
+          setScheduleFeedback({
+            message: 'Schedule updated. Calendar needs update.',
+            tone: 'warning',
+          });
+        }
+      } else {
+        setScheduleFeedback({
+          message: record ? 'Schedule updated.' : 'Reinspection scheduled.',
+          tone: 'success',
+        });
+      }
+
+      setCalendarRefreshToken((current) => current + 1);
+      await upload;
     } catch (error) {
       console.error(
         'Unable to schedule reinspection:',
@@ -168,6 +283,12 @@ export default function ReinspectionScreen() {
         'Schedule Not Saved',
         'Please try again. The original inspection has not been changed.'
       );
+      if (record) {
+        setSelectedDate(new Date(record.scheduledDate));
+        setHasChosenDate(true);
+      } else {
+        setHasChosenDate(false);
+      }
     } finally {
       setIsSaving(false);
     }
@@ -210,6 +331,17 @@ export default function ReinspectionScreen() {
     );
   }
 
+  if (!profile) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.emptyTitle}>Sign-in required</Text>
+        <Text style={styles.emptyText}>
+          Sign in again to view this reinspection schedule.
+        </Text>
+      </View>
+    );
+  }
+
   if (!source) {
     return (
       <View style={styles.center}>
@@ -234,6 +366,10 @@ export default function ReinspectionScreen() {
 
   const place = getPlaceById(source.placeId);
   const isCompleted = record?.status === 'completed';
+  const isOverdue = record
+    ? isReinspectionOverdue(record.scheduledDate, record.status)
+    : false;
+  const risk = calculateInspectionRisk(source);
 
   return (
     <View style={styles.screen}>
@@ -266,16 +402,15 @@ export default function ReinspectionScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>
-            PLACE
-          </Text>
-          <Text style={styles.placeName}>
-            {place?.name ?? 'Place not available'}
-          </Text>
-          <Text style={styles.secondaryText}>
-            Original inspection: {formatLocalDateTime(source.inspectionDate)}
-          </Text>
+        <View style={[styles.card, styles.placeCard]}>
+          <View style={styles.placeHeader}>
+            <View style={styles.placeIcon}><Ionicons name="business-outline" size={24} color={COLORS.primary} /></View>
+            <View style={styles.flex}>
+              <Text style={styles.cardLabel}>PLACE REQUIRING FOLLOW-UP</Text>
+              <Text style={styles.placeName}>{place?.name ?? 'Place not available'}</Text>
+              <Text style={styles.secondaryText}>Original inspection: {formatLocalDateTime(source.inspectionDate)}</Text>
+            </View>
+          </View>
           <View
             style={[
               styles.statusBadge,
@@ -288,7 +423,7 @@ export default function ReinspectionScreen() {
               {isCompleted
                 ? `Completed ${formatLocalDateTime(record.completedAt)}`
                 : record
-                  ? `Scheduled for ${formatLocalDate(record.scheduledDate)}`
+                  ? `${isOverdue ? 'Overdue since' : 'Scheduled for'} ${formatLocalDate(record.scheduledDate)}`
                   : 'Required - Not yet scheduled'}
             </Text>
           </View>
@@ -304,7 +439,7 @@ export default function ReinspectionScreen() {
           </Text>
 
           <Pressable
-            disabled={isCompleted}
+            disabled={isCompleted || isSaving}
             onPress={() => setShowPicker(true)}
             style={styles.dateButton}
           >
@@ -331,26 +466,52 @@ export default function ReinspectionScreen() {
             />
           )}
 
-          {!isCompleted && (
-            <AppButton
-              title={
-                record
-                  ? 'Change Schedule'
-                  : 'Schedule Reinspection'
-              }
-              onPress={saveSchedule}
-              disabled={!hasChosenDate}
-              loading={isSaving}
-            />
+          {isSaving ? (
+            <View style={styles.saveStatus}>
+              <ActivityIndicator size="small" color={COLORS.primary} />
+              <Text style={styles.secondaryText}>Saving schedule...</Text>
+            </View>
+          ) : scheduleFeedback ? (
+            <View style={styles.saveStatus}>
+              <Ionicons
+                name={scheduleFeedback.tone === 'success' ? 'checkmark-circle' : 'alert-circle'}
+                size={18}
+                color={scheduleFeedback.tone === 'success' ? COLORS.compliant : COLORS.warning}
+              />
+              <Text style={scheduleFeedback.tone === 'success' ? styles.successText : styles.warningText}>
+                {scheduleFeedback.message}
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.secondaryText}>Selecting a date saves the schedule immediately.</Text>
           )}
         </View>
         )}
 
         {record && !isCompleted && (
-          <AppButton
-            title="Conduct Reinspection"
-            onPress={conductReinspection}
-          />
+          <>
+            <ReinspectionCalendarAction
+              userId={profile.uid}
+              reinspectionId={record.id}
+              scheduledDate={record.scheduledDate}
+              placeName={place?.name ?? 'Scheduled place'}
+              address={
+                place
+                  ? [place.purok, place.address]
+                      .filter(Boolean)
+                      .join(', ')
+                  : undefined
+              }
+              barangay={place?.barangay ?? profile.assignedBarangay}
+              originalResult={getInspectionResultLabel(source.result)}
+              riskLevel={getRiskClassification(risk.level).label}
+              refreshToken={calendarRefreshToken}
+            />
+            <AppButton
+              title="Conduct Reinspection"
+              onPress={conductReinspection}
+            />
+          </>
         )}
 
         {isCompleted && (
@@ -407,10 +568,10 @@ const styles = StyleSheet.create({
     height: 42,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     backgroundColor: COLORS.primarySoft,
   },
-  title: { fontSize: 20, fontWeight: '700', color: COLORS.text },
+  title: { ...TYPOGRAPHY.title, color: COLORS.text },
   secondaryText: { fontSize: 12, lineHeight: 18, color: COLORS.textSecondary },
   content: { gap: SPACING.lg, padding: SPACING.lg, paddingBottom: 50 },
   card: {
@@ -418,12 +579,16 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xl,
     backgroundColor: COLORS.surface,
+    ...SHADOWS.subtle,
   },
+  placeCard: { backgroundColor: COLORS.primarySoft, borderColor: COLORS.primaryLight },
+  placeHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
+  placeIcon: { width: 48, height: 48, borderRadius: RADIUS.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.surface },
   cardLabel: { fontSize: 10, fontWeight: '800', color: COLORS.primary },
-  placeName: { fontSize: 18, fontWeight: '700', color: COLORS.text },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text },
+  placeName: { ...TYPOGRAPHY.subheading, color: COLORS.text },
+  sectionTitle: { ...TYPOGRAPHY.subheading, color: COLORS.text },
   statusBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 6, borderRadius: RADIUS.pill },
   pendingBadge: { backgroundColor: COLORS.warningSoft },
   completedBadge: { backgroundColor: COLORS.compliantSoft },
@@ -436,10 +601,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     backgroundColor: COLORS.background,
   },
   dateText: { fontSize: 14, fontWeight: '600', color: COLORS.text },
+  saveStatus: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, minHeight: 24 },
+  successText: { flex: 1, fontSize: 12, lineHeight: 18, color: COLORS.compliant },
+  warningText: { flex: 1, fontSize: 12, lineHeight: 18, color: COLORS.warning },
   completedNotice: {
     flexDirection: 'row',
     alignItems: 'flex-start',

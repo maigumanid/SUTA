@@ -14,6 +14,7 @@ import {
   fetchAndCachePlaces,
   getCachedPlaces,
 } from '@/services/placeService';
+import { refreshInspectionHistoryCache } from '@/services/inspectionHistoryService';
 import { Place } from '@/types/place';
 
 type PlacesContextValue = {
@@ -32,9 +33,22 @@ export function PlacesProvider({ children }: PropsWithChildren) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const activeScopeKey = useRef<string | null>(null);
+  const warmedHistoryScopeKey = useRef<string | null>(null);
   activeScopeKey.current = profile?.role === 'bsi'
     ? `${profile.uid}:${profile.assignedBarangayId}`
     : null;
+
+  const warmInspectionHistory = useCallback((bsiUid: string, barangayId: string) => {
+    const key = `${bsiUid}:${barangayId}`;
+    if (warmedHistoryScopeKey.current === key) return;
+    warmedHistoryScopeKey.current = key;
+    void refreshInspectionHistoryCache({ bsiUid, barangayId }).catch((historyError) => {
+      if (warmedHistoryScopeKey.current === key) {
+        warmedHistoryScopeKey.current = null;
+      }
+      console.error('Unable to refresh offline inspection history:', historyError);
+    });
+  }, []);
 
   const refreshPlaces = useCallback(async () => {
     if (!profile || profile.role !== 'bsi') {
@@ -54,6 +68,7 @@ export function PlacesProvider({ children }: PropsWithChildren) {
       );
       if (activeScopeKey.current !== requestScopeKey) return;
       setPlaces(nextPlaces);
+      warmInspectionHistory(profile.uid, profile.assignedBarangayId);
     } catch (refreshError) {
       if (activeScopeKey.current !== requestScopeKey) return;
       setError(
@@ -66,7 +81,7 @@ export function PlacesProvider({ children }: PropsWithChildren) {
         setIsLoading(false);
       }
     }
-  }, [profile]);
+  }, [profile, warmInspectionHistory]);
 
   useEffect(() => {
     if (!profile || profile.role !== 'bsi') {
@@ -102,6 +117,7 @@ export function PlacesProvider({ children }: PropsWithChildren) {
         if (!active) return;
         setPlaces(nextPlaces);
         setError(null);
+        warmInspectionHistory(profile.uid, profile.assignedBarangayId);
       } catch (refreshError) {
         if (!active) return;
         setError(
@@ -119,7 +135,7 @@ export function PlacesProvider({ children }: PropsWithChildren) {
     return () => {
       active = false;
     };
-  }, [profile]);
+  }, [profile, warmInspectionHistory]);
 
   const value = useMemo<PlacesContextValue>(
     () => ({

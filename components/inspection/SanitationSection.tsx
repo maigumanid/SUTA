@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import {
-  Pressable,
   StyleSheet,
   Text,
   View,

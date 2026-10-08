@@ -13,15 +13,29 @@ import {
 
 import AppButton from '@/components/common/AppButton';
 import EvidencePreviewGallery from '@/components/inspection/EvidencePreviewGallery';
-import { COLORS, RADIUS, SPACING } from '@/constants/theme';
+import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
+import { useNetwork } from '@/context/NetworkContext';
 import { usePlaces } from '@/context/PlacesContext';
+import {
+  fetchInspectionHistoryForPlace,
+  fetchStoredInspectionById,
+  type InspectionHistoryItem,
+  mergeInspectionHistory,
+  mergeInspectionRecord,
+} from '@/services/inspectionHistoryService';
 import { fetchInspectionRecord } from '@/services/inspectionRecordService';
 import {
   getStoredInspectionById,
   getStoredInspectionsForPlace,
   type StoredInspection,
 } from '@/storage/inspectionStorage';
+import {
+  getCachedInspectionById,
+  getCachedInspectionHistoryForPlace,
+  getCachedInspectionSummaryById,
+  type CachedInspectionSummary,
+} from '@/storage/inspectionHistoryCache';
 import { formatLocalDate, formatLocalDateTime } from '@/utils/dateTime';
 import {
   getInspectionResultLabel,
@@ -33,11 +47,14 @@ import { shareInspectionRecordPdf } from '@/utils/inspectionRecordPdf';
 export default function InspectionDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile } = useAuth();
+  const { isOnline } = useNetwork();
   const { getPlaceById } = usePlaces();
   const [inspection, setInspection] =
     useState<StoredInspection | null>(null);
+  const [offlineSummary, setOfflineSummary] =
+    useState<CachedInspectionSummary | null>(null);
   const [placeHistory, setPlaceHistory] =
-    useState<StoredInspection[]>([]);
+    useState<InspectionHistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -45,18 +62,67 @@ export default function InspectionDetailsScreen() {
     if (!profile) return;
 
     setIsLoading(true);
-    const scope = {
-      bsiUid: profile.uid,
-      barangayId: profile.assignedBarangayId,
-    };
-    const record = await getStoredInspectionById(id, scope);
-    const history = record
-      ? await getStoredInspectionsForPlace(record.placeId, scope)
-      : [];
-    setInspection(record);
-    setPlaceHistory(history);
-    setIsLoading(false);
-  }, [id, profile]);
+    try {
+      const scope = {
+        bsiUid: profile.uid,
+        barangayId: profile.assignedBarangayId,
+      };
+      const localRecord = await getStoredInspectionById(id, scope);
+      const cachedRecord = await getCachedInspectionById(id, scope);
+      const cachedSummary = await getCachedInspectionSummaryById(id, scope);
+      let record =
+        localRecord && cachedRecord
+          ? mergeInspectionRecord(localRecord, cachedRecord)
+          : localRecord ?? cachedRecord;
+
+      if (!record && isOnline !== false) {
+        try {
+          record = await fetchStoredInspectionById(id, scope);
+        } catch (error) {
+          console.error('Unable to refresh inspection details:', error);
+        }
+      }
+
+      const [localHistory, cachedHistory] = record
+        ? await Promise.all([
+            getStoredInspectionsForPlace(record.placeId, scope),
+            getCachedInspectionHistoryForPlace(record.placeId, scope),
+          ])
+        : [[], []];
+      const deviceHistory = mergeInspectionHistory(localHistory, cachedHistory);
+      let history = record
+        ? mergeInspectionHistory(deviceHistory, [record])
+        : deviceHistory;
+
+      if (record && isOnline !== false) {
+        try {
+          history = mergeInspectionHistory(
+            deviceHistory,
+            await fetchInspectionHistoryForPlace(record.placeId, scope)
+          );
+          const refreshedRecord = history.find(
+            (candidate) => candidate.id === record?.id && 'findings' in candidate
+          );
+          if (refreshedRecord && 'findings' in refreshedRecord) {
+            record = refreshedRecord;
+          }
+        } catch (error) {
+          console.error('Unable to refresh related inspection history:', error);
+        }
+      }
+
+      setInspection(record);
+      setOfflineSummary(record ? null : cachedSummary);
+      setPlaceHistory(history);
+    } catch (error) {
+      console.error('Unable to load inspection details:', error);
+      setInspection(null);
+      setOfflineSummary(null);
+      setPlaceHistory([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [id, isOnline, profile]);
 
   useFocusEffect(
     useCallback(() => {
@@ -81,13 +147,58 @@ export default function InspectionDetailsScreen() {
     );
   }
 
+  if (!inspection && offlineSummary) {
+    const place = getPlaceById(offlineSummary.placeId);
+    return (
+      <View style={styles.screen}>
+        <View style={styles.header}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            onPress={goBack}
+            style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
+          >
+            <Ionicons name="arrow-back" size={23} color={COLORS.text} />
+          </Pressable>
+          <View style={styles.flex}>
+            <Text style={styles.title}>Inspection Summary</Text>
+            <Text style={styles.secondary}>Offline reference</Text>
+          </View>
+        </View>
+        <ScrollView contentContainerStyle={styles.content}>
+          <View style={styles.offlineSummaryNotice}>
+            <Ionicons name="cloud-offline-outline" size={24} color={COLORS.primary} />
+            <View style={styles.flex}>
+              <Text style={styles.offlineSummaryTitle}>Summary available offline</Text>
+              <Text style={styles.offlineSummaryText}>
+                Connect to the internet to load the complete inspection record, checklist, findings, and photo references.
+              </Text>
+            </View>
+          </View>
+          <Section title="Available details" icon="clipboard-outline">
+            <DetailRow label="Place" value={place?.name ?? 'Registered place'} />
+            <DetailRow label="Inspection Type" value={offlineSummary.inspectionType} />
+            <DetailRow label="Inspection Date" value={formatLocalDateTime(offlineSummary.inspectionDate)} />
+            <DetailRow label="Result" value={getInspectionResultLabel(offlineSummary.result)} />
+            <DetailRow label="Risk Level" value={getRiskClassification(offlineSummary.riskLevel).label} />
+            <DetailRow label="Findings Recorded" value={String(offlineSummary.findingCount)} />
+            <DetailRow label="Sync Status" value="Synced" last />
+          </Section>
+          {isOnline === false ? null : (
+            <AppButton title="Load Complete Record" onPress={() => void load()} />
+          )}
+        </ScrollView>
+      </View>
+    );
+  }
+
   if (!inspection) {
     return (
       <View style={styles.center}>
         <Ionicons name="document-outline" size={48} color={COLORS.textMuted} />
         <Text style={styles.emptyTitle}>Inspection not available</Text>
         <Text style={styles.emptyText}>
-          This local inspection record could not be found on this device.
+          This inspection record could not be found or is not available offline.
         </Text>
         <AppButton title="Back to Places" onPress={goBack} />
       </View>
@@ -445,18 +556,19 @@ const styles = StyleSheet.create({
     height: 42,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     backgroundColor: COLORS.primarySoft,
   },
-  title: { fontSize: 20, fontWeight: '700', color: COLORS.text },
+  title: { ...TYPOGRAPHY.title, color: COLORS.text },
   secondary: { marginTop: 2, fontSize: 12, color: COLORS.textSecondary },
   content: { gap: SPACING.lg, padding: SPACING.lg, paddingBottom: 50 },
   section: {
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xl,
     backgroundColor: COLORS.surface,
+    ...SHADOWS.subtle,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -504,5 +616,17 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: COLORS.textSecondary,
   },
+  offlineSummaryNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.md,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.xl,
+    backgroundColor: COLORS.primarySoft,
+  },
+  offlineSummaryTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text },
+  offlineSummaryText: { marginTop: 4, fontSize: 13, lineHeight: 19, color: COLORS.textSecondary },
   pressed: { opacity: 0.7 },
 });

@@ -14,6 +14,7 @@ import type { EvidenceAttachment } from '@/types/householdInspection';
 import type { Json } from '@/types/supabase';
 import { formatLocalDate, formatLocalDateTime } from '@/utils/dateTime';
 import { shareInspectionRecordPdf } from '@/utils/inspectionRecordPdf';
+import { readInspectionEvidenceStoragePath } from '@/utils/inspectionEvidence';
 
 type FindingView = { category: string; details: string; evidence: { storagePath: string; fileName?: string; mimeType?: string; source?: 'camera' | 'library'; createdAt?: string }[] };
 
@@ -53,15 +54,18 @@ function readFindings(value: Json): FindingView[] {
     const finding = objectValue(entry); if (!finding) return [];
     const evidenceValue = finding.evidence;
     const evidence = Array.isArray(evidenceValue) ? evidenceValue.flatMap((file) => {
-      const item = objectValue(file); const storagePath = textValue(item, 'storagePath');
+      const item = objectValue(file); const storagePath = readInspectionEvidenceStoragePath(file);
       if (!storagePath) return [];
       const source = textValue(item, 'source');
+      const fileName = textValue(item, 'fileName') ?? textValue(item, 'file_name');
+      const mimeType = textValue(item, 'mimeType') ?? textValue(item, 'mime_type');
+      const createdAt = textValue(item, 'createdAt') ?? textValue(item, 'created_at');
       const parsed: FindingView['evidence'][number] = {
         storagePath,
-        ...(textValue(item, 'fileName') ? { fileName: textValue(item, 'fileName') } : {}),
-        ...(textValue(item, 'mimeType') ? { mimeType: textValue(item, 'mimeType') } : {}),
+        ...(fileName ? { fileName } : {}),
+        ...(mimeType ? { mimeType } : {}),
         ...(source === 'camera' || source === 'library' ? { source } : {}),
-        ...(textValue(item, 'createdAt') ? { createdAt: textValue(item, 'createdAt') } : {}),
+        ...(createdAt ? { createdAt } : {}),
       };
       return [parsed];
     }) : [];
@@ -90,7 +94,8 @@ export default function AdminInspectionDetailScreen() {
       const attachments = await Promise.all(finding.evidence.map(async (item, evidenceIndex) => {
         try {
           const uri = await createEvidenceSignedUrl(item.storagePath);
-          return { id: `${findingIndex}-${evidenceIndex}`, uri, source: item.source ?? 'library', createdAt: item.createdAt ?? next.inspectionDate, ...(item.fileName ? { fileName: item.fileName } : {}), ...(item.mimeType ? { mimeType: item.mimeType } : {}) } satisfies EvidenceAttachment;
+          const attachment: EvidenceAttachment = { id: `${findingIndex}-${evidenceIndex}`, uri, storagePath: item.storagePath, source: item.source ?? 'library', createdAt: item.createdAt ?? next.inspectionDate, ...(item.fileName ? { fileName: item.fileName } : {}), ...(item.mimeType ? { mimeType: item.mimeType } : {}) };
+          return attachment;
         } catch { return null; }
       }));
       return [String(findingIndex), attachments.filter((item): item is EvidenceAttachment => item !== null)] as const;

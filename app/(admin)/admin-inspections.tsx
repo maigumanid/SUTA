@@ -3,11 +3,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import AdminPage, { adminStyles } from '@/components/admin/AdminPage';
+import EmptyState from '@/components/common/EmptyState';
 import OptionSelector from '@/components/admin/OptionSelector';
 import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { fetchAdminBsis, fetchAdminInspections, fetchBarangays } from '@/services/adminService';
 import type { AdminBsiSummary, AdminInspectionSummary } from '@/types/admin';
 import { formatLocalDateTime } from '@/utils/dateTime';
+import { useNetwork } from '@/context/NetworkContext';
 
 type ResultFilter = 'all' | 'compliant' | 'non_compliant' | 'for_reinspection';
 const filters: ResultFilter[] = ['all', 'compliant', 'non_compliant', 'for_reinspection'];
@@ -18,6 +20,7 @@ const resultLabel = (value: string) => value === 'non_compliant'
     : value === 'compliant' ? 'Compliant' : value;
 
 export default function AdminInspectionsScreen() {
+  const { isOnline } = useNetwork();
   const params = useLocalSearchParams<{ result?: string; period?: string; reinspection?: string }>();
   const [items, setItems] = useState<AdminInspectionSummary[]>([]);
   const [query, setQuery] = useState('');
@@ -37,6 +40,7 @@ export default function AdminInspectionsScreen() {
     if (params.period === 'this_month') setPeriod('this_month');
   }, [params.period, params.result]);
   const load = useCallback(async () => {
+    if (isOnline === false) { setLoading(false); setError(null); return; }
     setLoading(true); setError(null);
     try {
       const [records, barangays, bsis] = await Promise.all([fetchAdminInspections(), fetchBarangays(), fetchAdminBsis()]);
@@ -46,7 +50,7 @@ export default function AdminInspectionsScreen() {
     }
     catch (caught) { setError(caught instanceof Error ? caught.message : 'Unable to load inspections.'); }
     finally { setLoading(false); }
-  }, []);
+  }, [isOnline]);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
   const bsiOptions = useMemo(
     () => bsis
@@ -84,7 +88,7 @@ export default function AdminInspectionsScreen() {
       <View style={styles.filters}>{(['all', 'inspection', 'reinspection'] as const).map((value) => <Pressable key={value} style={[styles.chip, inspectionType === value && styles.chipActive]} onPress={() => setInspectionType(value)}><Text style={[styles.chipText, inspectionType === value && styles.chipTextActive]}>{value === 'all' ? 'All types' : value === 'reinspection' ? 'Reinspection' : 'Inspection'}</Text></Pressable>)}</View>
       <View style={styles.filters}>{(['all', 'this_month'] as const).map((value) => <Pressable key={value} style={[styles.chip, period === value && styles.chipActive]} onPress={() => setPeriod(value)}><Text style={[styles.chipText, period === value && styles.chipTextActive]}>{value === 'all' ? 'All dates' : 'This month'}</Text></Pressable>)}</View>
       {error ? <Text style={adminStyles.error}>{error}</Text> : null}
-      {!loading && visible.length === 0 ? <Text style={adminStyles.empty}>No inspections found.</Text> : null}
+      {!loading && visible.length === 0 ? <EmptyState icon="clipboard-outline" title="No inspections found" description="Try adjusting the current search or filters." compact /> : null}
       {visible.map((item) => <Pressable key={item.id} style={adminStyles.card} onPress={() => router.push({ pathname: '/admin/inspection/[id]', params: { id: item.id } })}>
         <Text style={adminStyles.cardTitle}>{item.placeName}</Text>
         <Text style={adminStyles.body}>{item.barangayName} · {item.bsiName}</Text>
@@ -98,7 +102,7 @@ export default function AdminInspectionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  search: { ...TYPOGRAPHY.body, minHeight: 48, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, paddingHorizontal: SPACING.lg, color: COLORS.text, backgroundColor: COLORS.surface },
+  search: { ...TYPOGRAPHY.body, minHeight: 50, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, paddingHorizontal: SPACING.lg, color: COLORS.text, backgroundColor: COLORS.surface },
   filters: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
   chip: { borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.xl, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, backgroundColor: COLORS.surface },
   chipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },

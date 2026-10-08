@@ -1,9 +1,21 @@
 import { requireSupabase } from '@/services/supabase';
 import { throwSupabaseServiceError } from '@/services/supabaseServiceError';
-import type { InspectionRecord, InspectionRecordChecklistItem, InspectionRecordEvidence, InspectionRecordFinding } from '@/types/inspectionRecord';
+import {
+  INSPECTION_RECORD_CHECKLIST_DEFINITIONS,
+  type InspectionRecord,
+  type InspectionRecordChecklistItem,
+  type InspectionRecordChecklistKey,
+  type InspectionRecordEvidence,
+  type InspectionRecordFinding,
+} from '@/types/inspectionRecord';
 import type { RiskLevel } from '@/types/place';
 import type { Json } from '@/types/supabase';
 import { formatLocalDate } from '@/utils/dateTime';
+import {
+  evidenceIdFromStoragePath,
+  normalizeInspectionEvidenceStoragePath,
+  readInspectionEvidenceStoragePath,
+} from '@/utils/inspectionEvidence';
 
 type JsonObject = { [key: string]: Json | undefined };
 const objectValue = (value: Json | null): JsonObject | null => value && typeof value === 'object' && !Array.isArray(value) ? value : null;
@@ -16,6 +28,8 @@ const resultLabel = (value: string) => value === 'non_compliant' ? 'Non-Complian
 const riskLevels: readonly RiskLevel[] = ['Low', 'Moderate', 'High', 'Unclassified'];
 const riskLevel = (value: string): RiskLevel => riskLevels.find((item) => item === value) ?? 'Unclassified';
 const readable = (value: string) => value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+const checklistLabel = (key: InspectionRecordChecklistKey) =>
+  INSPECTION_RECORD_CHECKLIST_DEFINITIONS.find((item) => item.key === key)?.label ?? key;
 
 function waterSource(value?: string, other?: string) {
   if (value === 'level_1') return 'Level I — Point source';
@@ -49,23 +63,23 @@ function checklist(safeWater: Json, sanitationJson: Json) {
   const water = objectValue(safeWater); const microbial = objectValue(water?.microbialTest ?? null); const arsenic = objectValue(water?.arsenicTest ?? null); const sanitation = objectValue(sanitationJson);
   const microbialRecorded = booleanValue(microbial?.recorded); const arsenicConducted = booleanValue(arsenic?.conducted); const unsanitary = numberValue(sanitation?.unsanitaryToiletType);
   const safeWaterSupply: InspectionRecordChecklistItem[] = [
-    { key: 'water_source', label: 'Primary water source', answer: waterSource(textValue(water?.waterSourceType), textValue(water?.otherWaterSource)) },
-    { key: 'within_premises', label: 'Water source located within the premises', answer: yesNo(booleanValue(water?.locatedWithinPremises)) },
-    { key: 'available_12h', label: 'Water available for at least 12 hours per day', answer: yesNo(booleanValue(water?.availableAtLeast12Hours)) },
-    { key: 'microbial_test', label: 'Microbial test recorded', answer: yesNo(microbialRecorded) },
-    { key: 'microbial_date', label: 'Microbial test date', answer: microbialRecorded ? formatLocalDate(textValue(microbial?.dateValidationDone), 'Not recorded') : 'N/A' },
-    { key: 'ecoli_result', label: 'E. coli test result', answer: microbialRecorded ? binary(numberValue(microbial?.eColiResult), 'Presence detected', 'No presence detected') : 'N/A' },
-    { key: 'arsenic_test', label: 'Arsenic test conducted', answer: yesNo(arsenicConducted) },
-    { key: 'arsenic_date', label: 'Arsenic test date', answer: arsenicConducted ? formatLocalDate(textValue(arsenic?.dateTestingDone), 'Not recorded') : 'N/A' },
-    { key: 'arsenic_result', label: 'Arsenic test result', answer: arsenicConducted ? binary(numberValue(arsenic?.result), 'Within allowable limit', 'Above allowable limit') : 'N/A' },
-    { key: 'smdws', label: 'SMDWS', answer: binary(numberValue(water?.smdwsStatus)), derived: true },
+    { key: 'water_source', label: checklistLabel('water_source'), answer: waterSource(textValue(water?.waterSourceType), textValue(water?.otherWaterSource)) },
+    { key: 'within_premises', label: checklistLabel('within_premises'), answer: yesNo(booleanValue(water?.locatedWithinPremises)) },
+    { key: 'available_12h', label: checklistLabel('available_12h'), answer: yesNo(booleanValue(water?.availableAtLeast12Hours)) },
+    { key: 'microbial_test', label: checklistLabel('microbial_test'), answer: yesNo(microbialRecorded) },
+    { key: 'microbial_date', label: checklistLabel('microbial_date'), answer: microbialRecorded ? formatLocalDate(textValue(microbial?.dateValidationDone), 'Not recorded') : 'N/A' },
+    { key: 'ecoli_result', label: checklistLabel('ecoli_result'), answer: microbialRecorded ? binary(numberValue(microbial?.eColiResult), 'Presence detected', 'No presence detected') : 'N/A' },
+    { key: 'arsenic_test', label: checklistLabel('arsenic_test'), answer: yesNo(arsenicConducted) },
+    { key: 'arsenic_date', label: checklistLabel('arsenic_date'), answer: arsenicConducted ? formatLocalDate(textValue(arsenic?.dateTestingDone), 'Not recorded') : 'N/A' },
+    { key: 'arsenic_result', label: checklistLabel('arsenic_result'), answer: arsenicConducted ? binary(numberValue(arsenic?.result), 'Within allowable limit', 'Above allowable limit') : 'N/A' },
+    { key: 'smdws', label: checklistLabel('smdws'), answer: binary(numberValue(water?.smdwsStatus)), derived: true },
   ];
   const sanitationFacility: InspectionRecordChecklistItem[] = [
-    { key: 'facility_type', label: 'Toilet / sanitation facility type', answer: facility(sanitation) },
-    { key: 'shared_toilet', label: 'Shared with other households', answer: unsanitary === undefined ? binary(numberValue(sanitation?.sharedWithOtherHouseholds)) : 'N/A' },
-    { key: 'bsf', label: 'Basic Sanitation Facility', answer: binary(numberValue(sanitation?.basicSanitationFacility)), derived: true },
-    { key: 'disposal_method', label: 'Excreta disposal / treatment method', answer: unsanitary === undefined ? disposal(textValue(sanitation?.excretaDisposalMethod)) : 'N/A' },
-    { key: 'smss', label: 'SMSS', answer: binary(numberValue(sanitation?.smssStatus)), derived: true },
+    { key: 'facility_type', label: checklistLabel('facility_type'), answer: facility(sanitation) },
+    { key: 'shared_toilet', label: checklistLabel('shared_toilet'), answer: unsanitary === undefined ? binary(numberValue(sanitation?.sharedWithOtherHouseholds)) : 'N/A' },
+    { key: 'bsf', label: checklistLabel('bsf'), answer: binary(numberValue(sanitation?.basicSanitationFacility)), derived: true },
+    { key: 'disposal_method', label: checklistLabel('disposal_method'), answer: unsanitary === undefined ? disposal(textValue(sanitation?.excretaDisposalMethod)) : 'N/A' },
+    { key: 'smss', label: checklistLabel('smss'), answer: binary(numberValue(sanitation?.smssStatus)), derived: true },
   ];
   return { safeWaterSupply, sanitationFacility };
 }
@@ -76,9 +90,17 @@ function findings(value: Json): InspectionRecordFinding[] {
     const item = objectValue(entry); if (!item) return [];
     const evidenceValue = item.evidence;
     const evidence: InspectionRecordEvidence[] = Array.isArray(evidenceValue) ? evidenceValue.flatMap((raw) => {
-      const attachment = objectValue(raw); const storagePath = textValue(attachment?.storagePath); const id = textValue(attachment?.id);
-      if (!storagePath || !id) return [];
-      return [{ id, storagePath, mimeType: textValue(attachment?.mimeType) ?? 'image/jpeg' }];
+      const attachment = objectValue(raw); const storagePath = readInspectionEvidenceStoragePath(raw);
+      if (!storagePath) return [];
+      const id = textValue(attachment?.id) ?? evidenceIdFromStoragePath(storagePath);
+      return [{
+        id,
+        storagePath,
+        mimeType:
+          textValue(attachment?.mimeType) ??
+          textValue(attachment?.mime_type) ??
+          'image/jpeg',
+      }];
     }) : [];
     const category = textValue(item.category) ?? 'other';
     return [{ category: category === 'safe_water_supply' ? 'Safe Water Supply' : category === 'sanitation' ? 'Sanitation' : readable(category), description: textValue(item.details)?.trim() || 'No description recorded.', evidence }];
@@ -106,7 +128,7 @@ export async function fetchInspectionRecord(inspectionId: string): Promise<Inspe
   const followUp = linked?.completed_inspection_id === inspection.id ? inspection : linked?.completed_inspection_id ? related.get(linked.completed_inspection_id) : undefined;
   return {
     id: inspection.id,
-    placeName: place.name, placeType: place.place_type, registeredAddress: `${place.purok ? `${place.purok}, ` : ''}${place.address}`, barangayName: place.barangay_name ?? 'Barangay name unavailable', representativeName: place.representative_name,
+    placeName: place.name, placeType: place.place_type, purok: place.purok, address: place.address, registeredAddress: `${place.purok ? `${place.purok}, ` : ''}${place.address}`, barangayName: place.barangay_name ?? 'Barangay name unavailable', representativeName: place.representative_name,
     inspectionDate: inspection.inspection_date, inspectorName: profileResult.data?.name ?? 'Inspector name unavailable', inspectionType: inspection.reinspection_id ? 'Reinspection' : (earlierResult.count ?? 0) === 0 ? 'Initial Inspection' : 'Inspection', result: resultLabel(inspection.result), riskLevel: riskLevel(inspection.risk_level), riskPercentage: inspection.risk_percentage, criticalFailure: inspection.risk_critical_failure,
     locationStatus: readable(inspection.location_capture_status), ...(numberValue(location?.latitude) !== undefined ? { latitude: numberValue(location?.latitude) } : {}), ...(numberValue(location?.longitude) !== undefined ? { longitude: numberValue(location?.longitude) } : {}),
     ...mappedChecklist, findings: findings(inspection.findings), remarks: inspection.remarks.trim() || 'No remarks recorded.',
@@ -115,7 +137,9 @@ export async function fetchInspectionRecord(inspectionId: string): Promise<Inspe
 }
 
 export async function createInspectionEvidenceSignedUrl(storagePath: string) {
-  const { data, error } = await requireSupabase().storage.from('inspection-evidence').createSignedUrl(storagePath, 300);
+  const normalizedPath = normalizeInspectionEvidenceStoragePath(storagePath);
+  if (!normalizedPath) throw new Error('The evidence reference is invalid.');
+  const { data, error } = await requireSupabase().storage.from('inspection-evidence').createSignedUrl(normalizedPath, 300);
   if (error) throwSupabaseServiceError('Load private inspection evidence', error);
   return data.signedUrl;
 }

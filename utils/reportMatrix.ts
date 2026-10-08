@@ -1,133 +1,179 @@
-import type { InspectionRecord, InspectionRecordChecklistItem, InspectionRecordChecklistKey } from '@/types/inspectionRecord';
-import type { ReportLayoutKind, ReportSection, ReportViewModel } from '@/types/report';
+import {
+  INSPECTION_RECORD_CHECKLIST_DEFINITIONS,
+  type EmbeddedInspectionRecord,
+  type InspectionRecord,
+  type InspectionRecordChecklistItem,
+  type InspectionRecordChecklistKey,
+} from '@/types/inspectionRecord';
+import type { CurrentSanitationRow, ReportInspectionRow, ReportViewModel } from '@/types/report';
 import { formatLocalDate, formatLocalDateTime } from '@/utils/dateTime';
 
-export type MatrixColumn = { label: string; group: 'Record Information' | 'Safe Water Supply' | 'Sanitation Facility' | 'Assessment'; width: number };
-export type MatrixRow = { inspectionId: string; values: string[] };
-export type MatrixTable = { title: string; columns: MatrixColumn[]; rows: MatrixRow[] };
-export type FindingsRow = { inspectionId: string; values: string[] };
-export type RemarksRow = { inspectionId: string; values: string[] };
+export type WideReportColumn = {
+  label: string;
+  group: 'Identity / Location' | 'Inspection' | 'Safe Water Supply' | 'Sanitation Facility' | 'Findings / Remarks' | 'Reinspection' | 'Evidence';
+  className?: 'number' | 'identity' | 'date' | 'compact' | 'narrative';
+};
 
-const answer = (items: InspectionRecordChecklistItem[], key: InspectionRecordChecklistKey) => items.find((item) => item.key === key)?.answer ?? 'Not recorded';
-const compactRisk = (record: InspectionRecord) => record.riskLevel === 'Unclassified' ? 'Unclassified' : record.riskLevel;
-const reinspectionStatus = (record: InspectionRecord) => record.reinspection.required ? record.reinspection.status : 'Not required';
-const meaningfulRemarks = (remarks: string) => remarks.trim() && remarks.trim().toLowerCase() !== 'no remarks recorded.';
+export type WideReportRow = { inspectionId?: string; values: string[] };
+export type WideReportMatrix = { columns: WideReportColumn[]; rows: WideReportRow[] };
+export type EvidenceAppendixEntry = { rowNumber: number; record: EmbeddedInspectionRecord };
 
-const identifiers: MatrixColumn[] = [
-  { label: 'Place', group: 'Record Information', width: 16 },
-  { label: 'Barangay', group: 'Record Information', width: 10 },
-  { label: 'Inspection Date', group: 'Record Information', width: 10 },
-];
+const isHistoryRow = (row: CurrentSanitationRow | ReportInspectionRow): row is ReportInspectionRow => 'id' in row;
+const rowInspectionId = (row: CurrentSanitationRow | ReportInspectionRow) => isHistoryRow(row) ? row.id : row.inspectionId;
+const answer = (items: InspectionRecordChecklistItem[], key: InspectionRecordChecklistKey) =>
+  items.find((item) => item.key === key)?.answer ?? 'N/A';
+const compactAnswer = (value: string) => {
+  if (value === 'Presence detected') return 'Unsafe';
+  if (value === 'No presence detected') return 'Safe';
+  if (value === 'Within allowable limit') return 'Safe';
+  if (value === 'Above allowable limit') return 'Unsafe';
+  if (value === 'Not recorded') return 'N/A';
+  return value;
+};
+const findings = (record?: InspectionRecord) => {
+  if (!record?.findings.length) return 'None';
+  return record.findings.map((item) => `${item.category}: ${item.description}`).join('; ');
+};
+const evidenceCount = (record?: InspectionRecord) =>
+  record?.findings.reduce((total, item) => total + item.evidence.length, 0) ?? 0;
+const result = (row: CurrentSanitationRow | ReportInspectionRow, record?: InspectionRecord) =>
+  record?.result ?? (row.result === 'compliant' ? 'Compliant' : row.result === 'non_compliant' ? 'Non-Compliant' : row.result === 'for_reinspection' ? 'For Reinspection' : 'Not Yet Inspected');
+const risk = (row: CurrentSanitationRow | ReportInspectionRow, record?: InspectionRecord) =>
+  record?.riskLevel === 'Unclassified' || (!record && row.riskLevel === 'Unclassified') ? 'Unclassified' : record?.riskLevel ?? row.riskLevel;
+const percentage = (row: CurrentSanitationRow | ReportInspectionRow, record?: InspectionRecord) => {
+  const value = record?.riskPercentage ?? row.riskPercentage;
+  return value === null ? 'N/A' : `${Math.round(value)}%`;
+};
+const completionDate = (record?: InspectionRecord) =>
+  record?.reinspection.followUpDate
+    ? formatLocalDate(record.reinspection.followUpDate)
+    : record?.reinspection.completedDate
+      ? formatLocalDate(record.reinspection.completedDate)
+      : 'N/A';
 
-const waterColumns: MatrixColumn[] = [
-  { label: 'Water Source', group: 'Safe Water Supply', width: 10 },
-  { label: 'Within Premises', group: 'Safe Water Supply', width: 7 },
-  { label: '≥12h Available', group: 'Safe Water Supply', width: 7 },
-  { label: 'Microbial Test', group: 'Safe Water Supply', width: 7 },
-  { label: 'Microbial Date', group: 'Safe Water Supply', width: 8 },
-  { label: 'E. coli', group: 'Safe Water Supply', width: 8 },
-  { label: 'Arsenic Test', group: 'Safe Water Supply', width: 7 },
-  { label: 'Arsenic Date', group: 'Safe Water Supply', width: 8 },
-  { label: 'Arsenic Result', group: 'Safe Water Supply', width: 8 },
-  { label: 'SMDWS', group: 'Safe Water Supply', width: 6 },
-];
+function hasSingleAdminScope(report: ReportViewModel, label: 'Barangay' | 'Inspector') {
+  return report.generatedBy === 'admin' && report.scope.some((item) =>
+    item.startsWith(`${label}:`) && !item.endsWith('All barangays') && !item.endsWith('All BSIs')
+  );
+}
 
-const sanitationAssessmentColumns: MatrixColumn[] = [
-  { label: 'Place Type', group: 'Record Information', width: 8 },
-  { label: 'Inspector', group: 'Record Information', width: 10 },
-  { label: 'Inspection Type', group: 'Record Information', width: 8 },
-  { label: 'Toilet / Facility Type', group: 'Sanitation Facility', width: 11 },
-  { label: 'Shared Toilet', group: 'Sanitation Facility', width: 7 },
-  { label: 'Disposal / Treatment', group: 'Sanitation Facility', width: 10 },
-  { label: 'BSF', group: 'Sanitation Facility', width: 5 },
-  { label: 'SMSS', group: 'Sanitation Facility', width: 5 },
-  { label: 'Result', group: 'Assessment', width: 9 },
-  { label: 'Risk', group: 'Assessment', width: 6 },
-  { label: 'Risk %', group: 'Assessment', width: 5 },
-  { label: 'Reinspection', group: 'Assessment', width: 7 },
-  { label: 'Reinspection Status', group: 'Assessment', width: 9 },
-];
-
-const idValues = (record: InspectionRecord) => [record.placeName, record.barangayName, formatLocalDateTime(record.inspectionDate)];
-const waterValues = (record: InspectionRecord) => [
-  answer(record.safeWaterSupply, 'water_source'),
-  answer(record.safeWaterSupply, 'within_premises'),
-  answer(record.safeWaterSupply, 'available_12h'),
-  answer(record.safeWaterSupply, 'microbial_test'),
-  answer(record.safeWaterSupply, 'microbial_date'),
-  answer(record.safeWaterSupply, 'ecoli_result'),
-  answer(record.safeWaterSupply, 'arsenic_test'),
-  answer(record.safeWaterSupply, 'arsenic_date'),
-  answer(record.safeWaterSupply, 'arsenic_result'),
-  answer(record.safeWaterSupply, 'smdws'),
-];
-const sanitationAssessmentValues = (record: InspectionRecord) => [
-  record.placeType,
-  record.inspectorName,
-  record.inspectionType,
-  answer(record.sanitationFacility, 'facility_type'),
-  answer(record.sanitationFacility, 'shared_toilet'),
-  answer(record.sanitationFacility, 'disposal_method'),
-  answer(record.sanitationFacility, 'bsf'),
-  answer(record.sanitationFacility, 'smss'),
-  record.result,
-  compactRisk(record),
-  record.riskPercentage === null ? 'N/A' : `${Math.round(record.riskPercentage)}%`,
-  record.reinspection.required ? 'Yes' : 'No',
-  reinspectionStatus(record),
-];
-
-function pair(titlePrefix: string, records: InspectionRecord[]): MatrixTable[] {
+function identityColumns(report: ReportViewModel): WideReportColumn[] {
+  if (report.layoutKind === 'place_history') {
+    return [
+      { label: 'No.', group: 'Identity / Location', className: 'number' },
+      { label: 'Household / Place', group: 'Identity / Location', className: 'identity' },
+      { label: 'Household Representative', group: 'Identity / Location', className: 'identity' },
+      { label: 'Purok', group: 'Identity / Location', className: 'compact' },
+      { label: 'Address', group: 'Identity / Location', className: 'identity' },
+      { label: 'Inspection Date', group: 'Inspection', className: 'date' },
+      { label: 'Inspection Type', group: 'Inspection', className: 'compact' },
+      ...(report.generatedBy === 'admin' && !hasSingleAdminScope(report, 'Inspector')
+        ? [{ label: 'BSI', group: 'Inspection' as const, className: 'identity' as const }]
+        : []),
+    ];
+  }
+  const includeBarangay = report.generatedBy === 'admin' && !hasSingleAdminScope(report, 'Barangay');
+  const includeInspector = report.generatedBy === 'admin' && !hasSingleAdminScope(report, 'Inspector');
   return [
-    { title: `${titlePrefix}Safe Water Supply Checklist`, columns: [...identifiers, ...waterColumns], rows: records.map((record) => ({ inspectionId: record.id, values: [...idValues(record), ...waterValues(record)] })) },
-    { title: `${titlePrefix}Sanitation Facility & Assessment`, columns: [...identifiers, ...sanitationAssessmentColumns], rows: records.map((record) => ({ inspectionId: record.id, values: [...idValues(record), ...sanitationAssessmentValues(record)] })) },
+    { label: 'No.', group: 'Identity / Location', className: 'number' },
+    { label: 'Household / Place', group: 'Identity / Location', className: 'identity' },
+    { label: 'Household Representative', group: 'Identity / Location', className: 'identity' },
+    { label: 'Purok', group: 'Identity / Location', className: 'compact' },
+    { label: 'Address', group: 'Identity / Location', className: 'identity' },
+    ...(includeBarangay ? [{ label: 'Barangay', group: 'Identity / Location' as const, className: 'identity' as const }] : []),
+    { label: 'Latest Inspection', group: 'Inspection', className: 'date' },
+    { label: 'Inspection Type', group: 'Inspection', className: 'compact' },
+    ...(includeInspector ? [{ label: 'BSI', group: 'Inspection' as const, className: 'identity' as const }] : []),
   ];
 }
 
-export function buildMatrixTables(records: InspectionRecord[], layoutKind?: ReportLayoutKind): MatrixTable[] {
-  if (layoutKind === 'reinspections' || layoutKind === 'pending_reinspections') {
-    const originals = records.filter((record) => record.inspectionType !== 'Reinspection');
-    const followUps = records.filter((record) => record.inspectionType === 'Reinspection');
-    return [...pair('Original Inspection — ', originals), ...pair('Follow-up Inspection — ', followUps)];
-  }
-  return pair('', records);
+const assessmentColumns: WideReportColumn[] = [
+  { label: 'Result', group: 'Inspection', className: 'compact' },
+  { label: 'Risk', group: 'Inspection', className: 'compact' },
+  { label: 'Risk %', group: 'Inspection', className: 'compact' },
+];
+const checklistColumns: WideReportColumn[] = INSPECTION_RECORD_CHECKLIST_DEFINITIONS.map((item) => ({
+  label: item.shortLabel,
+  group: item.group,
+  className: item.key.includes('date') ? 'date' : 'compact',
+}));
+const finalColumns: WideReportColumn[] = [
+  { label: 'Findings', group: 'Findings / Remarks', className: 'narrative' },
+  { label: 'Remarks', group: 'Findings / Remarks', className: 'narrative' },
+  { label: 'Reinspection Required', group: 'Reinspection', className: 'compact' },
+  { label: 'Reinspection Schedule', group: 'Reinspection', className: 'date' },
+  { label: 'Reinspection Status', group: 'Reinspection', className: 'compact' },
+  { label: 'Follow-up / Completion', group: 'Reinspection', className: 'date' },
+  { label: 'Evidence Count', group: 'Evidence', className: 'compact' },
+];
+
+export function buildWideReportMatrix(report: ReportViewModel, records: InspectionRecord[]): WideReportMatrix {
+  const recordById = new Map(records.map((record) => [record.id, record]));
+  const sourceRows = report.recordRows ?? [];
+  const columns = [...identityColumns(report), ...assessmentColumns, ...checklistColumns, ...finalColumns];
+  const rows = sourceRows.map((source, index) => {
+    const inspectionId = rowInspectionId(source);
+    const record = inspectionId ? recordById.get(inspectionId) : undefined;
+    const identity = report.layoutKind === 'place_history'
+      ? [
+        String(index + 1),
+        record?.placeName ?? source.placeName,
+        record?.representativeName?.trim() || '—',
+        record?.purok ?? source.purok,
+        record?.address ?? source.address,
+        formatLocalDateTime(record?.inspectionDate ?? source.inspectionDate),
+        record?.inspectionType ?? source.inspectionType,
+        ...(report.generatedBy === 'admin' && !hasSingleAdminScope(report, 'Inspector') ? [record?.inspectorName ?? source.bsiName ?? 'N/A'] : []),
+      ]
+      : [
+        String(index + 1),
+        record?.placeName ?? source.placeName,
+        record?.representativeName?.trim() || '—',
+        record?.purok ?? source.purok,
+        record?.address ?? source.address,
+        ...(report.generatedBy === 'admin' && !hasSingleAdminScope(report, 'Barangay') ? [record?.barangayName ?? source.barangayName] : []),
+        formatLocalDateTime(record?.inspectionDate ?? source.inspectionDate, 'Not Yet Inspected'),
+        record?.inspectionType ?? source.inspectionType,
+        ...(report.generatedBy === 'admin' && !hasSingleAdminScope(report, 'Inspector') ? [record?.inspectorName ?? source.bsiName ?? 'N/A'] : []),
+      ];
+    const checklist = INSPECTION_RECORD_CHECKLIST_DEFINITIONS.map((definition) => {
+      if (!record) return 'N/A';
+      const items = definition.group === 'Safe Water Supply' ? record.safeWaterSupply : record.sanitationFacility;
+      return compactAnswer(answer(items, definition.key));
+    });
+    return {
+      inspectionId,
+      values: [
+        ...identity,
+        result(source, record),
+        risk(source, record),
+        percentage(source, record),
+        ...checklist,
+        findings(record),
+        record?.remarks ?? 'None',
+        record ? (record.reinspection.required ? 'Yes' : 'No') : 'N/A',
+        record?.reinspection.scheduledDate ? formatLocalDate(record.reinspection.scheduledDate) : 'N/A',
+        record?.reinspection.status ?? source.reinspectionStatus ?? 'N/A',
+        completionDate(record),
+        String(evidenceCount(record)),
+      ],
+    };
+  });
+  return { columns, rows };
 }
 
-export function buildFindingsRows(records: InspectionRecord[]): FindingsRow[] {
-  return records.flatMap((record) => record.findings.map((finding, index) => ({ inspectionId: record.id, values: [String(index + 1), record.placeName, formatLocalDateTime(record.inspectionDate), record.inspectionType, finding.category, finding.description, meaningfulRemarks(record.remarks) ? record.remarks : '—', String(finding.evidence.length)] })));
-}
-
-export function buildRemarksRows(records: InspectionRecord[]): RemarksRow[] {
-  return records.filter((record) => meaningfulRemarks(record.remarks)).map((record) => ({ inspectionId: record.id, values: [record.placeName, formatLocalDateTime(record.inspectionDate), record.inspectionType, record.remarks] }));
-}
-
-export const FINDINGS_COLUMNS = ['#', 'Place', 'Inspection Date', 'Record Type', 'Category', 'Finding / Observation', 'Remarks', 'Evidence Count'];
-export const REMARKS_COLUMNS = ['Place', 'Inspection Date', 'Record Type', 'Remarks'];
-export const MATRIX_LEGEND = ['SMDWS — Safely Managed Drinking Water Service', 'BSF — Basic Sanitation Facility', 'SMSS — Safely Managed Sanitation Service', 'N/A — Not Applicable'];
-
-export type ConsolidatedPart = { number: number; title: string; sections?: ReportSection[]; tables?: MatrixTable[] };
-
-export function buildConsolidatedParts(report: ReportViewModel) {
-  const tables = buildMatrixTables(report.inspectionRecords ?? [], report.layoutKind);
-  const municipal = report.layoutKind === 'municipal_summary';
-  const reinspection = report.layoutKind === 'reinspections' || report.layoutKind === 'pending_reinspections';
-  const duplicateSectionTitles = new Set(['Inspection Register', 'Recent Inspections']);
-  const summarySections = report.sections.filter((section) => !duplicateSectionTitles.has(section.title) && (!municipal || section.title !== 'Barangay Summary'));
-  const parts: ConsolidatedPart[] = [{ number: 1, title: municipal ? 'Executive Summary' : report.layoutKind === 'barangay_summary' || report.layoutKind === 'assigned_barangay_summary' ? 'Barangay Summary' : report.layoutKind === 'priority_places' ? 'Priority Summary' : report.layoutKind === 'reinspections' || report.layoutKind === 'pending_reinspections' ? 'Reinspection Case Summary' : report.layoutKind === 'bsi_activity' ? 'BSI Activity Summary' : 'Report Scope / Totals', sections: summarySections }];
-  let next = 2;
-  if (municipal) {
-    parts.push({ number: next, title: 'Barangay Summary', sections: report.sections.filter((section) => section.title === 'Barangay Summary') });
-    next += 1;
+export function buildEvidenceAppendixEntries(
+  report: ReportViewModel,
+  records: EmbeddedInspectionRecord[],
+): EvidenceAppendixEntry[] {
+  const rowNumbers = new Map<string, number>();
+  for (const [index, row] of (report.recordRows ?? []).entries()) {
+    const id = rowInspectionId(row);
+    if (id) rowNumbers.set(id, index + 1);
   }
-  if (reinspection) {
-    parts.push({ number: next, title: 'Original Inspection Matrix', tables: tables.filter((table) => table.title.startsWith('Original Inspection')) });
-    parts.push({ number: next + 1, title: 'Follow-up Inspection Matrix', tables: tables.filter((table) => table.title.startsWith('Follow-up Inspection')) });
-    next += 2;
-  } else {
-    parts.push({ number: next, title: 'Inspection Checklist Matrix', tables });
-    next += 1;
-  }
-  return { parts, findingsPart: next, remarksPart: next + 1, evidencePart: next + 2 };
+  return records
+    .filter((record) => evidenceCount(record) > 0)
+    .map((record) => ({ rowNumber: rowNumbers.get(record.id) ?? 0, record }));
 }
 
 export function evidenceGroupLabel(record: InspectionRecord) {

@@ -1,66 +1,104 @@
 # Phase 9 reporting
 
 Reports use the authenticated Expo Supabase client and existing RLS policies.
-Administrators receive municipality/city-wide data. BSI reports are fixed to
-the signed-in BSI and assigned barangay; the UI cannot select another barangay.
-No service-role credential or public report URL is used.
+Administrators receive authorized municipal data. BSI reporting is fixed to the
+signed-in BSI's assigned barangay. No service-role credential, public report
+URL, migration, or report RPC is used.
 
-## Metric definitions
+## Operational model
 
-- Current place-risk counts use `places.risk_level`, representing the latest
-  authoritative inspection protected by the stale-inspection rule.
-- Inspection registers use historical risk values stored on each inspection.
-- Result and activity counts honor the selected reporting period.
-- Initial inspection is the earliest ordinary inspection for a place; linked
-  follow-ups are reinspections and later unlinked records are regular
-  inspections.
-- Overdue means a pending reinspection whose scheduled date/time is before the
-  current time. It is derived for reporting, not stored as a new status.
-- Compliance rate is compliant inspections divided by all matching inspections
-  in the selected period.
-- Reinspection completion rate is completed divided by matching pending plus
-  completed reinspections.
-- BSI activity is operational only. It contains no ratings, ranks, or grades.
+Reporting is organized around three modes:
 
-## Preview and export
+1. **Current Sanitation Register** — the main operational report. It contains
+   one row per registered place and uses that place's latest completed server
+   inspection or reinspection. Purok, result, risk, reinspection, place type,
+   date, barangay, and BSI controls are filters over this single report engine.
+2. **Place Inspection History** — a complete oldest-to-newest audit trail for
+   one place. Every matching initial inspection, later inspection, and
+   reinspection is included.
+3. **Municipal/City Sanitation Consolidated Summary** — Admin only. It contains
+   one current-status aggregate row per barangay and directs record-level
+   drilldown to Current Sanitation Register.
 
-One report view model drives both the mobile preview and PDF so labels, metrics,
-filters, summary rows, checklist matrices, findings, remarks, and evidence remain
-consistent. Consolidated previews use horizontally scrollable matrices with one
-inspection per row. PDF export reloads the filtered dataset up to a mobile
-safety limit of 500 rows instead of exporting only the visible page. If more
-records match, the report states the included and total counts.
+BSIs see the first two modes. Admin sees all three. The individual Full
+Sanitary Inspection Record remains available from inspection details.
 
-Consolidated PDFs use A4 landscape with small margins and repeated table headers.
-The complete checklist is split into two readable matrices: Safe Water Supply,
-then Sanitation Facility & Assessment. Findings, remarks, and optional evidence
-are separate sections tied to the same exported inspections. Reinspection
-reports split original and follow-up matrices. Photo evidence is optional for
-broad reports and enabled by default for the priority report. Files are generated
-in the app cache and passed only to the native share sheet. They are not uploaded
-to Supabase and do not print UUIDs, raw JSON, signed URLs, Storage/local paths,
-authentication data, or sync internals.
+## Current-record selection
 
-Admin-generated reports do not contain signing blocks. BSI-generated reports
-end with printed Prepared by and Received / Reviewed by spaces. These are paper
-signature areas only and are not digital signatures.
+The places current fields are authoritative and are protected by the existing
+stale-inspection guard. Candidate places are paged from places. For every place
+whose last inspection date is set, reporting resolves the matching inspection
+event and orders equal-date records by stable inspection ID. The latest
+record's BSI, result, risk, findings, remarks, inspection type, and linked
+reinspection determine the current row.
 
-Admin and BSI reporting require connectivity. Existing offline BSI inspection
-capture and synchronization behavior is unchanged.
+Only submitted server inspections participate; draft, Pending, and Failed local
+work is not presented as completed reporting data. A place without a completed
+inspection appears as **Not Yet Inspected** in an unfiltered register without
+fabricated inspection fields. It is excluded naturally when date, result, risk,
+BSI, or reinspection filters require an inspection.
 
-## Full inspection records
+Reinspection state is attached only when the authoritative relationship points
+to the selected current inspection. A completed follow-up therefore cannot
+leave the place classified as overdue because of an older schedule.
 
-Admin and BSI inspection-detail screens can export an individual A4 Sanitary
-Inspection Record. The record is loaded through the authenticated Supabase
-client, so the existing Admin and barangay RLS scopes remain authoritative. It
-contains place and inspection information, the complete recorded checklist,
-derived SMDWS/Basic Sanitation Facility/SMSS results, findings, remarks,
-reinspection information, and a printed representative acknowledgment area.
-BSI exports additionally include the BSI/Admin printed submission signature
-blocks; Admin exports do not.
+## Preview and complete export
 
-Evidence is grouped with its finding. Each private object receives a short-lived
-signed URL, is downloaded to the Expo cache, embedded in the PDF as an image
-data URI, and removed from cache after conversion. An unavailable image produces
-an explicit placeholder without failing the rest of the record. Signed URLs,
-Storage paths, local paths, and internal identifiers are never printed.
+Current-register and place-history previews show 20 compact rows per page with
+the exact matching total and visible range. Preview does not hydrate hundreds
+of full checklists.
+
+Export starts a fresh query and retrieves every matching place or history event
+using backend pagination. There is no silent 20-, 100-, or 500-record cap.
+Current-register candidates are paged in 500-row batches; full inspection
+records are then hydrated for every selected latest inspection. Place history
+uses 200-row export batches and is ordered oldest to newest.
+
+The Current Sanitation Register PDF contains:
+
+1. a page-one report header and active filters;
+2. one wide matrix table with exactly one row per place;
+3. the stored Household Representative immediately after Household / Place;
+4. every Safe Water Supply, laboratory-testing, and Sanitation Facility field
+   as a column in that same row;
+5. findings, remarks, result, risk, reinspection, and evidence-count columns in
+   that same row;
+6. an optional private photo-evidence appendix; and
+7. BSI submission signatures when generated by a BSI.
+
+There is no separate inspection-detail, checklist, findings, or remarks
+appendix. Place Inspection History uses the same matrix rule with exactly one
+row per inspection or reinspection event. Checklist column definitions are
+shared with the inspection-record mapper so supported fields cannot silently
+drop from bulk reports.
+
+BSI rows omit Barangay and BSI because those values are stated in the report
+header. Admin rows retain them for mixed scopes and omit either column when a
+single Barangay or BSI is already fixed in the header. The municipal aggregate
+remains one summary row per barangay and does not receive household checklist
+columns.
+
+## Evidence and output
+
+Evidence uses the existing private Storage flow. Each included image receives a
+fresh short-lived signed URL, is downloaded to Expo cache, embedded as a data
+URI, and removed after conversion. Signed URLs and storage paths are never
+printed. Missing evidence produces a calm unavailable placeholder without
+failing the rest of the report. Evidence is grouped by inspection in a compact
+two-column grid. Its caption uses the real containing finding's category and
+description; if that stored association is absent, the caption says **General
+Inspection Evidence** rather than guessing from order or filename.
+
+PDFs use A4 landscape, compact matrix typography, concise multi-line headings,
+and print signature areas. The large report header is ordinary
+page-one content rather than fixed or repeated content. Matrix table headers
+are emitted as a non-repeating table row group, preventing WebKit from cloning
+them over later-page rows. No fixed footer is rendered; this avoids row
+collisions and otherwise blank footer-only pages.
+Admin reports do not add an unnecessary Admin signature block. PDF generation
+still occurs on-device, so very large photo-heavy exports can be constrained by
+phone memory; narrowing filters or leaving photos off is the safe fallback.
+
+Admin and BSI reporting require connectivity. Offline inspection capture,
+offline retention, synchronization, risk, evidence upload, calendar, and
+authorization behavior are unchanged.

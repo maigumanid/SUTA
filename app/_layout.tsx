@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import {
   SafeAreaProvider,
   SafeAreaView,
@@ -10,7 +10,11 @@ import { InspectionProvider } from '@/context/InspectionContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { PlacesProvider } from '@/context/PlacesContext';
 import { InspectionSyncProvider } from '@/context/InspectionSyncContext';
-import { COLORS } from '@/constants/theme';
+import { NotificationProvider } from '@/context/NotificationContext';
+import { NetworkProvider } from '@/context/NetworkContext';
+import ConnectivityBanner from '@/components/common/ConnectivityBanner';
+import { COLORS, SPACING, TYPOGRAPHY } from '@/constants/theme';
+import SanitationIllustration from '@/components/illustrations/SanitationIllustration';
 
 export default function RootLayout() {
   return (
@@ -19,16 +23,21 @@ export default function RootLayout() {
         edges={['top', 'left', 'right']}
         style={styles.safeArea}
       >
-        <AuthProvider>
-          <PlacesProvider>
-            <InspectionSyncProvider>
-              <InspectionProvider>
-                <StatusBar style="dark" />
-                <RootNavigator />
-              </InspectionProvider>
-            </InspectionSyncProvider>
-          </PlacesProvider>
-        </AuthProvider>
+        <NetworkProvider>
+          <AuthProvider>
+            <PlacesProvider>
+              <InspectionSyncProvider>
+                <InspectionProvider>
+                  <NotificationProvider>
+                    <StatusBar style="dark" />
+                    <ConnectivityBanner />
+                    <RootNavigator />
+                  </NotificationProvider>
+                </InspectionProvider>
+              </InspectionSyncProvider>
+            </PlacesProvider>
+          </AuthProvider>
+        </NetworkProvider>
       </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -40,7 +49,10 @@ function RootNavigator() {
   if (isLoading) {
     return (
       <View style={styles.loading}>
+        <SanitationIllustration variant="inspection" size="medium" style={styles.loadingArt} />
         <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingTitle}>Preparing SUTA</Text>
+        <Text style={styles.loadingText}>Restoring your secure workspace</Text>
       </View>
     );
   }
@@ -58,12 +70,17 @@ function RootNavigator() {
         <Stack.Screen name="login" />
       </Stack.Protected>
 
-      <Stack.Protected guard={isAuthenticated && mustChangePassword}>
+      <Stack.Protected guard={isAuthenticated}>
         <Stack.Screen name="change-password" />
       </Stack.Protected>
 
-      <Stack.Protected guard={isBsi}>
+      <Stack.Protected guard={isAuthenticated && !mustChangePassword}>
         <Stack.Screen name="onboarding" />
+        <Stack.Screen name="notifications" />
+        <Stack.Screen name="edit-profile" />
+      </Stack.Protected>
+
+      <Stack.Protected guard={isBsi}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="place/new" />
         <Stack.Screen name="place/[id]" />
@@ -75,7 +92,6 @@ function RootNavigator() {
         <Stack.Screen name="inspection/evidence" />
         <Stack.Screen name="reinspection/[id]" />
         <Stack.Screen name="sync" />
-        <Stack.Screen name="reports" />
       </Stack.Protected>
 
       <Stack.Protected guard={isAdmin}>
@@ -98,5 +114,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.background,
+    padding: SPACING.xl,
   },
+  loadingArt: { marginBottom: SPACING.sm },
+  loadingTitle: { ...TYPOGRAPHY.subheading, color: COLORS.text, marginTop: SPACING.md },
+  loadingText: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, marginTop: SPACING.xs },
 });

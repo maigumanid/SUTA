@@ -14,6 +14,7 @@ import type {
   CreateBsiInput,
 } from '@/types/admin';
 import type { RiskLevel } from '@/types/place';
+import { normalizeInspectionEvidenceStoragePath } from '@/utils/inspectionEvidence';
 
 const riskLevels: readonly RiskLevel[] = ['Low', 'Moderate', 'High', 'Unclassified'];
 function readRiskLevel(value: string): RiskLevel {
@@ -168,6 +169,7 @@ export async function fetchAdminBsis(): Promise<AdminBsiSummary[]> {
       pendingReinspections: reinspectionsData.filter(
         (item) => item.bsi_uid === profile.id && item.status === 'pending'
       ).length,
+      ...(profile.avatar_path ? { avatarPath: profile.avatar_path } : {}),
     };
   });
 }
@@ -243,8 +245,10 @@ export async function fetchAdminInspectionDetail(id: string): Promise<AdminInspe
 }
 
 export async function createEvidenceSignedUrl(storagePath: string) {
+  const normalizedPath = normalizeInspectionEvidenceStoragePath(storagePath);
+  if (!normalizedPath) throw new Error('The evidence reference is invalid.');
   const { data, error } = await requireSupabase().storage
-    .from('inspection-evidence').createSignedUrl(storagePath, 300);
+    .from('inspection-evidence').createSignedUrl(normalizedPath, 300);
   if (error) throwSupabaseServiceError('Load private evidence', error);
   return data.signedUrl;
 }

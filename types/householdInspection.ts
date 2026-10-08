@@ -37,11 +37,13 @@ export type EvidenceAttachment = {
   createdAt: string;
   fileName?: string;
   mimeType?: string;
+  /** Private remote object path retained locally for authenticated fallback. */
+  storagePath?: string;
 };
 
 export type BackendEvidenceAttachment = Omit<
   EvidenceAttachment,
-  'uri'
+  'uri' | 'storagePath'
 > & {
   storagePath: string;
 };

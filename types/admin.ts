@@ -25,6 +25,7 @@ export type AdminBsiSummary = {
   inspectionCount: number;
   lastInspectionDate?: string;
   pendingReinspections: number;
+  avatarPath?: string;
 };
 
 export type AdminInspectionSummary = {

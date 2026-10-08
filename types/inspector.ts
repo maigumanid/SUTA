@@ -9,6 +9,7 @@ type BaseProfile = {
   assignedBarangay: string;
   active: boolean;
   mustChangePassword: boolean;
+  avatarPath?: string;
   jurisdictionName?: string;
 };
 

@@ -150,12 +150,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
+    borderRadius: RADIUS.lg,
     backgroundColor: COLORS.surface,
   },
 
   focused: {
     borderColor: COLORS.primary,
+    backgroundColor: COLORS.primarySoft,
   },
 
   error: {

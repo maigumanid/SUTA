@@ -26,6 +26,7 @@ import {
   getCachedProfile,
 } from '@/storage/profileStorage';
 import type { AppProfile } from '@/types/inspector';
+import { markDeviceAuthenticated } from '@/storage/secureStorage';
 
 export type AuthUser = {
   email?: string;
@@ -37,6 +38,7 @@ type AuthContextValue = {
   profile: AppProfile | null;
   isLoading: boolean;
   configurationReady: boolean;
+  isProfileValidated: boolean;
   refreshProfile: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<AppProfile>;
   signOut: () => Promise<void>;
@@ -65,6 +67,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [profile, setProfile] = useState<AppProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isProfileValidated, setIsProfileValidated] = useState(false);
   const hydrationId = useRef(0);
 
   const hydrateUser = useCallback(async (
@@ -77,11 +80,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (!nextUser) {
       setUser(null);
       setProfile(null);
+      setIsProfileValidated(false);
       setIsLoading(false);
       return;
     }
 
     setUser(mapAuthUser(nextUser));
+    setIsProfileValidated(false);
+    void markDeviceAuthenticated();
     if (!silently) setIsLoading(true);
 
     const cachedProfile = allowCachedProfile
@@ -108,12 +114,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
       if (currentHydration !== hydrationId.current) return;
 
       setProfile(liveProfile);
+      setIsProfileValidated(true);
     } catch (error) {
       if (currentHydration !== hydrationId.current) return;
 
       if (isInvalidProfileError(error)) {
         setUser(null);
         setProfile(null);
+        setIsProfileValidated(false);
         await supabaseClient?.auth.signOut();
       } else {
         console.error('Unable to refresh the account profile:', error);
@@ -196,6 +204,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       profile,
       isLoading,
       configurationReady: isSupabaseConfigured,
+      isProfileValidated,
       refreshProfile: async () => {
         const client = requireSupabase();
         const { data, error } = await client.auth.getUser();
@@ -232,13 +241,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
               data.user.user_metadata.must_change_password === true,
           };
           await cacheProfile(nextProfile);
+          await markDeviceAuthenticated();
           setUser(mapAuthUser(data.user));
           setProfile(nextProfile);
+          setIsProfileValidated(true);
           return nextProfile;
         } catch (profileError) {
           await client.auth.signOut();
           setUser(null);
           setProfile(null);
+          setIsProfileValidated(false);
           throw profileError;
         }
       },
@@ -252,9 +264,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
         hydrationId.current += 1;
         setUser(null);
         setProfile(null);
+        setIsProfileValidated(false);
       },
     }),
-    [hydrateUser, isLoading, profile, user]
+    [hydrateUser, isLoading, isProfileValidated, profile, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

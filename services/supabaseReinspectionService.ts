@@ -8,6 +8,9 @@ import {
   SupabaseServiceError,
   throwSupabaseServiceError,
 } from '@/services/supabaseServiceError';
+import type {
+  InspectionScope,
+} from '@/storage/inspectionStorage';
 import type { ReinspectionRecord } from '@/storage/reinspectionStorage';
 import type { TablesInsert } from '@/types/supabase';
 
@@ -161,4 +164,21 @@ export async function completeSupabaseReinspection(
   } catch (mappingError) {
     throwSupabaseServiceError('Map completed reinspection', mappingError);
   }
+}
+
+export async function fetchSupabaseReinspections(
+  scope: InspectionScope
+) {
+  const { data, error } = await requireSupabase()
+    .from('reinspections')
+    .select('*')
+    .eq('bsi_uid', scope.bsiUid)
+    .eq('barangay_id', scope.barangayId)
+    .order('scheduled_date', { ascending: true });
+
+  if (error) {
+    throwSupabaseServiceError('Load reinspections', error);
+  }
+
+  return (data ?? []).map(mapSupabaseReinspection);
 }

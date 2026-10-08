@@ -9,6 +9,7 @@ import {
 import {
   COLORS,
   RADIUS,
+  SHADOWS,
   SIZE,
   SPACING,
   TYPOGRAPHY,
@@ -91,9 +92,10 @@ export default function AppButton({
 
 const styles = StyleSheet.create({
   base: {
-    height: SIZE.buttonHeight,
-    borderRadius: RADIUS.md,
+    minHeight: SIZE.buttonHeight,
+    borderRadius: RADIUS.lg,
     paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
 
     alignItems: 'center',
     justifyContent: 'center',
@@ -104,6 +106,7 @@ const styles = StyleSheet.create({
   primary: {
     backgroundColor: COLORS.primary,
     borderColor: COLORS.primary,
+    ...SHADOWS.subtle,
   },
 
   secondary: {
@@ -131,6 +134,7 @@ const styles = StyleSheet.create({
 
   text: {
     ...TYPOGRAPHY.button,
+    textAlign: 'center',
   },
 
   lightText: {

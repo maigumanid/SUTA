@@ -2,6 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Platform } from 'react-native';
 
 import type { EvidenceAttachment } from '@/types/householdInspection';
+import { persistEvidenceAttachment } from '@/storage/evidenceFileStorage';
 
 export type EvidenceSource = 'camera' | 'library';
 
@@ -30,44 +31,30 @@ function getExtension(asset: ImagePicker.ImagePickerAsset) {
   return '.jpg';
 }
 
-async function persistAsset(
+function persistAsset(
   asset: ImagePicker.ImagePickerAsset,
   source: EvidenceSource
 ): Promise<EvidenceAttachment> {
   const id = `evidence_${Date.now()}_${Math.random()
     .toString(36)
     .slice(2, 8)}`;
-  let uri = asset.uri;
-
-  // expo-file-system's File/Directory API is native-only. Import it lazily so
-  // web route discovery never evaluates unsupported filesystem paths.
-  if (Platform.OS !== 'web') {
-    const { Directory, File, Paths } = await import('expo-file-system');
-    const evidenceDirectory = new Directory(
-      Paths.document,
-      'inspection-evidence'
-    );
-
-    if (!evidenceDirectory.exists) {
-      evidenceDirectory.create();
-    }
-
-    const destination = new File(
-      evidenceDirectory,
-      `${id}${getExtension(asset)}`
-    );
-    new File(asset.uri).copy(destination);
-    uri = destination.uri;
-  }
-
-  return {
+  const attachment: EvidenceAttachment = {
     id,
-    uri,
+    uri: asset.uri,
     source,
     createdAt: new Date().toISOString(),
     ...(asset.fileName ? { fileName: asset.fileName } : {}),
     ...(asset.mimeType ? { mimeType: asset.mimeType } : {}),
   };
+
+  return Promise.resolve(
+    Platform.OS === 'web'
+      ? attachment
+      : persistEvidenceAttachment({
+          ...attachment,
+          fileName: attachment.fileName ?? `${id}${getExtension(asset)}`,
+        })
+  );
 }
 
 export async function selectEvidencePhoto(

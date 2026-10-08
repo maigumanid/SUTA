@@ -1,19 +1,23 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { COLORS, RADIUS, SPACING } from '@/constants/theme';
+import { COLORS, RADIUS, SHADOWS, SPACING } from '@/constants/theme';
+import { formatLocalDate } from '@/utils/dateTime';
+import { isReinspectionOverdue } from '@/utils/reinspection';
 
 type ReinspectionCardProps = {
   establishmentName: string;
-  dueDate: string;
+  scheduledDate: string;
   onPress: () => void;
 };
 
 export default function ReinspectionCard({
   establishmentName,
-  dueDate,
+  scheduledDate,
   onPress,
 }: ReinspectionCardProps) {
+  const overdue = isReinspectionOverdue(scheduledDate, 'pending');
+
   return (
     <Pressable
       onPress={onPress}
@@ -22,19 +26,19 @@ export default function ReinspectionCard({
         pressed && styles.pressed,
       ]}
     >
-      <View style={styles.iconContainer}>
+      <View style={[styles.iconContainer, overdue && styles.overdueIcon]}>
         <Ionicons
           name="refresh-outline"
           size={22}
-          color={COLORS.warning}
+          color={overdue ? COLORS.violation : COLORS.warning}
         />
       </View>
 
       <View style={styles.content}>
         <Text style={styles.name}>{establishmentName}</Text>
 
-        <Text style={styles.date}>
-          Reinspection due: {dueDate}
+        <Text style={[styles.date, overdue && styles.overdueDate]}>
+          {overdue ? 'Overdue' : 'Due'}: {formatLocalDate(scheduledDate)}
         </Text>
       </View>
 
@@ -54,9 +58,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
-    padding: SPACING.md,
+    borderRadius: RADIUS.xl,
+    padding: SPACING.lg,
     gap: SPACING.md,
+    ...SHADOWS.subtle,
   },
 
   pressed: {
@@ -66,10 +71,14 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 44,
     height: 44,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.primarySoft,
+    borderRadius: RADIUS.lg,
+    backgroundColor: COLORS.warningSoft,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  overdueIcon: {
+    backgroundColor: COLORS.violationSoft,
   },
 
   content: {
@@ -86,5 +95,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 13,
     color: COLORS.textSecondary,
+  },
+
+  overdueDate: {
+    color: COLORS.violation,
+    fontWeight: '700',
   },
 });

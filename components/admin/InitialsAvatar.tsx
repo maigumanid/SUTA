@@ -1,14 +1,6 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { SIZE } from '@/constants/theme';
+import ProfileAvatar from '@/components/common/ProfileAvatar';
 
-import { COLORS, RADIUS, SIZE, TYPOGRAPHY } from '@/constants/theme';
-
-export default function InitialsAvatar({ name }: { name: string }) {
-  const initials = name.trim().split(/\s+/).slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase()).join('') || 'BSI';
-  return <View style={styles.avatar}><Text style={styles.text}>{initials}</Text></View>;
+export default function InitialsAvatar({ name, avatarPath }: { name: string; avatarPath?: string }) {
+  return <ProfileAvatar name={name} avatarPath={avatarPath} size={SIZE.avatarMedium} />;
 }
-
-const styles = StyleSheet.create({
-  avatar: { width: SIZE.avatarMedium, height: SIZE.avatarMedium, borderRadius: RADIUS.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.primarySoft },
-  text: { ...TYPOGRAPHY.label, color: COLORS.primary },
-});

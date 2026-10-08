@@ -1,7 +1,14 @@
 import type { ReinspectionRecord } from '@/storage/reinspectionStorage';
+import type { StoredInspection } from '@/storage/inspectionStorage';
 import type {
   BackendInspectionFinding,
+  EvidenceAttachment,
   HouseholdInspection,
+  InspectionFinding,
+  InspectionLocation,
+  LocationCaptureStatus,
+  SafeWaterSupply,
+  SanitationFacility,
 } from '@/types/householdInspection';
 import type { AppProfile, BsiProfile } from '@/types/inspector';
 import {
@@ -12,6 +19,10 @@ import {
   type RiskLevel,
 } from '@/types/place';
 import type { Database, Json, Tables, TablesInsert } from '@/types/supabase';
+import {
+  evidenceIdFromStoragePath,
+  readInspectionEvidenceStoragePath,
+} from '@/utils/inspectionEvidence';
 
 export type SupabaseInspectionRow = Tables<'inspections'>;
 export type SupabasePlaceRow = Tables<'places'>;
@@ -68,6 +79,7 @@ export function mapSupabaseProfile(
     assignedBarangay: row.assigned_barangay_name ?? '',
     active: row.active,
     mustChangePassword: row.must_change_password,
+    ...(row.avatar_path ? { avatarPath: row.avatar_path } : {}),
     ...(row.jurisdiction_name
       ? { jurisdictionName: row.jurisdiction_name }
       : {}),
@@ -276,6 +288,190 @@ export function mapSupabaseReinspection(
     ...(row.completed_at ? { completedAt: row.completed_at } : {}),
     ...(row.completed_inspection_id
       ? { completedInspectionId: row.completed_inspection_id }
+      : {}),
+  };
+}
+
+const LOCATION_CAPTURE_STATUSES: readonly LocationCaptureStatus[] = [
+  'not_attempted',
+  'captured',
+  'permission_denied',
+  'services_disabled',
+  'unavailable',
+];
+
+function mapStoredEvidence(value: Json): EvidenceAttachment[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    const storagePath = readInspectionEvidenceStoragePath(entry);
+    if (!storagePath) return [];
+    if (typeof entry === 'string') {
+      return [{
+        id: evidenceIdFromStoragePath(storagePath),
+        uri: '',
+        source: 'camera' as const,
+        createdAt: '',
+        storagePath,
+      }];
+    }
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+
+    const id =
+      typeof entry.id === 'string' && entry.id.trim()
+        ? entry.id
+        : evidenceIdFromStoragePath(storagePath);
+    const source =
+      entry.source === 'camera' || entry.source === 'library'
+        ? entry.source
+        : 'camera';
+    const createdAt =
+      typeof entry.createdAt === 'string'
+        ? entry.createdAt
+        : typeof entry.created_at === 'string'
+          ? entry.created_at
+          : '';
+    const fileName =
+      typeof entry.fileName === 'string'
+        ? entry.fileName
+        : typeof entry.file_name === 'string'
+          ? entry.file_name
+          : undefined;
+    const mimeType =
+      typeof entry.mimeType === 'string'
+        ? entry.mimeType
+        : typeof entry.mime_type === 'string'
+          ? entry.mime_type
+          : undefined;
+
+    return [
+      {
+        id,
+        uri: '',
+        source,
+        createdAt,
+        storagePath,
+        ...(fileName ? { fileName } : {}),
+        ...(mimeType ? { mimeType } : {}),
+      },
+    ];
+  });
+}
+
+function mapStoredFindings(value: Json): InspectionFinding[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      return [];
+    }
+
+    const id = typeof entry.id === 'string' ? entry.id : '';
+    const details = typeof entry.details === 'string' ? entry.details : '';
+    const category =
+      entry.category === 'safe_water_supply' ||
+      entry.category === 'sanitation' ||
+      entry.category === 'other'
+        ? entry.category
+        : 'other';
+
+    if (!id) {
+      return [];
+    }
+
+    return [
+      {
+        id,
+        category,
+        details,
+        evidence: mapStoredEvidence(entry.evidence ?? []),
+      },
+    ];
+  });
+}
+
+function mapStoredLocation(value: Json | null): InspectionLocation | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  if (
+    typeof value.latitude !== 'number' ||
+    typeof value.longitude !== 'number' ||
+    typeof value.capturedAt !== 'string'
+  ) {
+    return undefined;
+  }
+
+  return {
+    latitude: value.latitude,
+    longitude: value.longitude,
+    capturedAt: value.capturedAt,
+    ...(typeof value.accuracy === 'number'
+      ? { accuracy: value.accuracy }
+      : {}),
+  };
+}
+
+/**
+ * Maps an authoritative server record into the existing read-only inspection
+ * shape. This is intentionally not written to the local sync queue.
+ */
+export function mapSupabaseInspection(
+  row: SupabaseInspectionRow
+): StoredInspection {
+  if (
+    row.result !== 'compliant' &&
+    row.result !== 'non_compliant' &&
+    row.result !== 'for_reinspection'
+  ) {
+    throw new Error(`Unsupported inspection result: ${row.result}`);
+  }
+
+  if (
+    !LOCATION_CAPTURE_STATUSES.some(
+      (status) => status === row.location_capture_status
+    )
+  ) {
+    throw new Error(
+      `Unsupported location capture status: ${row.location_capture_status}`
+    );
+  }
+
+  return {
+    id: row.id,
+    bsiUid: row.bsi_uid,
+    barangayId: row.barangay_id,
+    savedAt: row.synced_at,
+    syncStatus: 'synced',
+    placeId: row.place_id,
+    inspectionDate: row.inspection_date,
+    locationCaptureStatus:
+      row.location_capture_status as LocationCaptureStatus,
+    ...(mapStoredLocation(row.inspection_location)
+      ? { inspectionLocation: mapStoredLocation(row.inspection_location) }
+      : {}),
+    ...(row.location_capture_attempted_at
+      ? { locationCaptureAttemptedAt: row.location_capture_attempted_at }
+      : {}),
+    result: row.result,
+    findings: mapStoredFindings(row.findings),
+    safeWaterSupply: row.safe_water_supply as unknown as SafeWaterSupply,
+    sanitationFacility:
+      row.sanitation_facility as unknown as SanitationFacility,
+    remarks: row.remarks,
+    ...(row.reinspection_id
+      ? { reinspectionId: row.reinspection_id }
+      : {}),
+    ...(row.reinspection_of_inspection_id
+      ? {
+          reinspectionOfInspectionId:
+            row.reinspection_of_inspection_id,
+        }
       : {}),
   };
 }

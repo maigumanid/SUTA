@@ -1,4 +1,3 @@
-import NetInfo from '@react-native-community/netinfo';
 import {
   createContext,
   type PropsWithChildren,
@@ -12,17 +11,17 @@ import {
 
 import { useAuth } from '@/context/AuthContext';
 import { usePlaces } from '@/context/PlacesContext';
+import { useNetwork } from '@/context/NetworkContext';
 import {
   retryPendingInspections,
   syncStoredInspection,
   type InspectionSyncPassResult,
 } from '@/services/inspectionSyncService';
 import type { InspectionScope } from '@/storage/inspectionStorage';
-import { isNetworkStateOnline } from '@/utils/networkState';
-
 type InspectionSyncContextValue = {
   isOnline: boolean | null;
   isSyncing: boolean;
+  syncFeedback: 'syncing' | 'complete' | 'attention' | null;
   retryAllInspections: () => Promise<InspectionSyncPassResult>;
   retryInspection: (inspectionId: string) => Promise<void>;
   syncRevision: number;
@@ -37,15 +36,19 @@ function getScopeKey(scope: InspectionScope) {
 }
 
 export function InspectionSyncProvider({ children }: PropsWithChildren) {
-  const { profile } = useAuth();
+  const { profile, isProfileValidated } = useAuth();
   const { refreshPlaces } = usePlaces();
-  const [isOnline, setIsOnline] = useState<boolean | null>(null);
+  const { isOnline } = useNetwork();
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState<'syncing' | 'complete' | 'attention' | null>(null);
   const [syncRevision, setSyncRevision] = useState(0);
   const [syncingInspectionIds, setSyncingInspectionIds] = useState(
     () => new Set<string>()
   );
   const activeScopeKey = useRef<string | null>(null);
+  const lastScopeKey = useRef<string | null>(null);
+  const previousOnline = useRef<boolean | null>(null);
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const bsiUid = profile?.role === 'bsi' ? profile.uid : undefined;
   const barangayId = profile?.role === 'bsi'
@@ -53,12 +56,12 @@ export function InspectionSyncProvider({ children }: PropsWithChildren) {
     : undefined;
 
   const getActiveScope = useCallback((): InspectionScope => {
-    if (!bsiUid || !barangayId) {
+    if (!bsiUid || !barangayId || !isProfileValidated) {
       throw new Error('An authenticated BSI profile is required to sync.');
     }
 
     return { bsiUid, barangayId };
-  }, [barangayId, bsiUid]);
+  }, [barangayId, bsiUid, isProfileValidated]);
 
   const markInspectionSyncing = useCallback(
     (inspectionId: string, syncing: boolean) => {
@@ -142,54 +145,55 @@ export function InspectionSyncProvider({ children }: PropsWithChildren) {
   }, [getActiveScope, markInspectionSyncing, refreshPlacesAfterSync]);
 
   useEffect(() => {
-    if (!bsiUid || !barangayId) {
+    if (!bsiUid || !barangayId || !isProfileValidated) {
       activeScopeKey.current = null;
-      setIsOnline(null);
+      lastScopeKey.current = null;
+      previousOnline.current = null;
       setIsSyncing(false);
+      setSyncFeedback(null);
       setSyncingInspectionIds(new Set());
       return;
     }
 
     const scope = { bsiUid, barangayId };
     const key = getScopeKey(scope);
+    if (lastScopeKey.current !== key) {
+      previousOnline.current = null;
+      lastScopeKey.current = key;
+    }
     activeScopeKey.current = key;
-    let previousOnline: boolean | null = null;
-
-    const unsubscribe = NetInfo.addEventListener((state) => {
-      if (activeScopeKey.current !== key) {
-        return;
-      }
-
-      const online = isNetworkStateOnline(state);
-      const shouldRetry =
-        online &&
-        (previousOnline === false || previousOnline === null);
-
-      previousOnline = online;
-      setIsOnline(online);
-
-      if (shouldRetry) {
-        // Automatic retry is intentionally quiet. Per-record status remains
-        // retryable and visible on Sync Status if a pass cannot complete.
-        void retryAllInspections().catch(() => undefined);
-      }
-    });
+    const wasOffline = previousOnline.current === false;
+    const shouldRetry = isOnline === true && previousOnline.current !== true;
+    previousOnline.current = isOnline;
+    if (shouldRetry) {
+      if (wasOffline) setSyncFeedback('syncing');
+      void retryAllInspections().then((result) => {
+        if (activeScopeKey.current !== key) return;
+        if (!wasOffline) return;
+        setSyncFeedback(result.failed > 0 ? 'attention' : 'complete');
+        if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+        feedbackTimer.current = setTimeout(() => setSyncFeedback(null), 3500);
+      }).catch(() => {
+        if (wasOffline && activeScopeKey.current === key) setSyncFeedback('attention');
+      });
+    }
 
     return () => {
-      unsubscribe();
       if (activeScopeKey.current === key) {
         activeScopeKey.current = null;
-        setIsOnline(null);
         setIsSyncing(false);
         setSyncingInspectionIds(new Set());
       }
     };
-  }, [barangayId, bsiUid, retryAllInspections]);
+  }, [barangayId, bsiUid, isOnline, isProfileValidated, retryAllInspections]);
+
+  useEffect(() => () => { if (feedbackTimer.current) clearTimeout(feedbackTimer.current); }, []);
 
   const value = useMemo<InspectionSyncContextValue>(
     () => ({
       isOnline,
       isSyncing,
+      syncFeedback,
       retryAllInspections,
       retryInspection,
       syncRevision,
@@ -198,6 +202,7 @@ export function InspectionSyncProvider({ children }: PropsWithChildren) {
     [
       isSyncing,
       isOnline,
+      syncFeedback,
       retryAllInspections,
       retryInspection,
       syncRevision,

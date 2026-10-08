@@ -27,7 +27,6 @@ import {
 import { completeReinspection } from '@/storage/reinspectionStorage';
 import {
   getInspectionSyncErrorMessage,
-  syncStoredInspection,
 } from '@/services/inspectionSyncService';
 import { formatLocalDate, formatLocalDateTime } from '@/utils/dateTime';
 import { getInspectionTypeLabel } from '@/utils/inspectionDisplay';
@@ -35,9 +34,9 @@ import { getNetworkAvailability } from '@/utils/networkState';
 import { calculateInspectionRisk, getRiskClassification } from '@/utils/riskClassification';
 
 export default function InspectionSummaryScreen() {
-  const { profile } = useAuth();
-  const { getPlaceById, refreshPlaces } = usePlaces();
-  const { isOnline } = useInspectionSync();
+  const { profile, isProfileValidated } = useAuth();
+  const { getPlaceById } = usePlaces();
+  const { isOnline, retryInspection } = useInspectionSync();
   const { tour } = useLocalSearchParams<{
     tour?: string;
   }>();
@@ -71,7 +70,7 @@ export default function InspectionSummaryScreen() {
   }, [draftInspection, profile]);
 
   const resetInspectionFlowTo = (
-    pathname: '/place/[id]' | '/sync',
+    pathname: '/place/[id]' | '/(tabs)/sync',
     placeId?: string
   ) => {
     router.dismissAll();
@@ -87,7 +86,7 @@ export default function InspectionSummaryScreen() {
           return;
         }
 
-        router.push('/sync');
+        router.push('/(tabs)/sync');
       });
     });
   };
@@ -280,18 +279,12 @@ export default function InspectionSummaryScreen() {
       let syncError: unknown;
       const networkAvailable = await getNetworkAvailability();
 
-      if (networkAvailable === false) {
+      if (networkAvailable === false || !isProfileValidated) {
         savedOffline = true;
       } else {
         try {
-          await syncStoredInspection(saved.id, scope);
+          await retryInspection(saved.id);
           synced = true;
-          try {
-            await refreshPlaces();
-          } catch {
-            // The remote inspection is already synchronized. Place data will
-            // refresh on the next normal context refresh.
-          }
         } catch (error) {
           syncError = error;
           savedOffline = (await getNetworkAvailability()) === false;
@@ -328,7 +321,7 @@ export default function InspectionSummaryScreen() {
                 return;
               }
 
-              resetInspectionFlowTo('/sync');
+              resetInspectionFlowTo('/(tabs)/sync');
             },
           },
         ],

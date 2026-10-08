@@ -62,6 +62,7 @@ export type Database = {
       bsi_profiles: {
         Row: {
           active: boolean
+          avatar_path: string | null
           assigned_barangay_id: string | null
           assigned_barangay_name: string | null
           contact_number: string
@@ -76,6 +77,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          avatar_path?: string | null
           assigned_barangay_id?: string | null
           assigned_barangay_name?: string | null
           contact_number: string
@@ -90,6 +92,7 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          avatar_path?: string | null
           assigned_barangay_id?: string | null
           assigned_barangay_name?: string | null
           contact_number?: string
@@ -387,11 +390,37 @@ export type Database = {
           },
         ]
       }
+      notification_log: {
+        Row: { id: string; notification_id: string; recipient_user_id: string; notification_type: string; dedupe_key: string; delivery_status: string; provider_tickets: Json; error_summary: string | null; sent_at: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; notification_id: string; recipient_user_id: string; notification_type: string; dedupe_key: string; delivery_status?: string; provider_tickets?: Json; error_summary?: string | null; sent_at?: string | null; created_at?: string; updated_at?: string }
+        Update: { id?: string; notification_id?: string; recipient_user_id?: string; notification_type?: string; dedupe_key?: string; delivery_status?: string; provider_tickets?: Json; error_summary?: string | null; sent_at?: string | null; created_at?: string; updated_at?: string }
+        Relationships: []
+      }
+      notifications: {
+        Row: { id: string; recipient_user_id: string; notification_type: string; title: string; body: string; entity_type: string | null; entity_id: string | null; route_kind: string; route_entity_id: string | null; dedupe_key: string; read_at: string | null; created_at: string }
+        Insert: { id?: string; recipient_user_id: string; notification_type: string; title: string; body: string; entity_type?: string | null; entity_id?: string | null; route_kind: string; route_entity_id?: string | null; dedupe_key: string; read_at?: string | null; created_at?: string }
+        Update: { id?: string; recipient_user_id?: string; notification_type?: string; title?: string; body?: string; entity_type?: string | null; entity_id?: string | null; route_kind?: string; route_entity_id?: string | null; dedupe_key?: string; read_at?: string | null; created_at?: string }
+        Relationships: []
+      }
+      push_tokens: {
+        Row: { id: string; user_id: string; expo_push_token: string; platform: string; active: boolean; created_at: string; updated_at: string; last_seen_at: string }
+        Insert: { id?: string; user_id: string; expo_push_token: string; platform: string; active?: boolean; created_at?: string; updated_at?: string; last_seen_at?: string }
+        Update: { id?: string; user_id?: string; expo_push_token?: string; platform?: string; active?: boolean; created_at?: string; updated_at?: string; last_seen_at?: string }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      deactivate_push_token: { Args: { p_expo_push_token: string }; Returns: undefined }
+      mark_all_notifications_read: { Args: Record<PropertyKey, never>; Returns: undefined }
+      mark_notification_read: { Args: { p_notification_id: string }; Returns: undefined }
+      register_push_token: { Args: { p_expo_push_token: string; p_platform: string }; Returns: Database["public"]["Tables"]["push_tokens"]["Row"] }
+      update_own_profile: {
+        Args: { p_name: string; p_contact_number: string; p_avatar_path?: string | null }
+        Returns: Database["public"]["Tables"]["bsi_profiles"]["Row"]
+      }
       admin_create_bsi_profile: {
         Args: {
           p_admin_user_id: string

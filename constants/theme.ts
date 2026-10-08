@@ -29,6 +29,14 @@ export const COLORS = {
   primaryDeep: '#043B38',
   primaryLight: '#DCEFED',
   primarySoft: '#EEF7F5',
+  primaryMist: '#E3F3F0',
+
+  aqua: '#47B8AE',
+  aquaSoft: '#DDF5F1',
+  blue: '#4A7FA0',
+  blueSoft: '#E7F0F6',
+  indigo: '#596A9B',
+  indigoSoft: '#ECEEF7',
 
   // --------------------------------------------------------------------------
   // Backgrounds / Surfaces
@@ -160,6 +168,7 @@ export const RADIUS = {
   md: 10,
   lg: 14,
   xl: 18,
+  xxl: 24,
 
   pill: 999,
 };
@@ -313,7 +322,7 @@ export const SIZE = {
 
   headerHeight: 64,
 
-  bottomTabHeight: 64,
+  bottomTabHeight: 72,
 };
 
 

@@ -39,7 +39,7 @@ export default function NewInspectionScreen() {
 
   const [isCapturingLocation, setIsCapturingLocation] =
     useState(false);
-  const [capturedLocation, setCapturedLocation] =
+  const [capturedLocation] =
     useState<InspectionLocationResult | null>(() => {
       const draft = draftInspection;
 
@@ -132,7 +132,7 @@ export default function NewInspectionScreen() {
     );
 
     requestAnimationFrame(() => {
-      router.push({
+      router.replace({
         pathname: '/inspection/checklist',
         params: {
           placeId: place.id,
@@ -155,14 +155,12 @@ export default function NewInspectionScreen() {
     const result =
       await captureInspectionLocation();
 
-    setIsCapturingLocation(false);
-
     if (result.status === 'captured') {
-      setCapturedLocation(result);
       openChecklist(result);
       return;
     }
 
+    setIsCapturingLocation(false);
     setLocationFailure(result);
   };
 
@@ -365,7 +363,7 @@ export default function NewInspectionScreen() {
 
             <ReminderItem
               icon="cloud-offline-outline"
-              text="Inspection records will later support offline saving and synchronization."
+              text="Inspection records are saved on this device and synchronize when connectivity is available."
             />
           </View>
         </View>
@@ -415,9 +413,6 @@ export default function NewInspectionScreen() {
           </Text>
         )}
 
-        <Text style={styles.developmentNote}>
-          Inspection records are using sample data during development.
-        </Text>
       </ScrollView>
     </View>
   );

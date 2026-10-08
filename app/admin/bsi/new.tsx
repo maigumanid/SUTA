@@ -1,10 +1,11 @@
 import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text } from 'react-native';
 
 import AppButton from '@/components/common/AppButton';
 import AppInput from '@/components/common/AppInput';
 import OptionSelector from '@/components/admin/OptionSelector';
+import KeyboardSafeView from '@/components/common/KeyboardSafeView';
 import ScreenContainer from '@/components/common/ScreenContainer';
 import { COLORS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { createBsiAccount, fetchBarangays } from '@/services/adminService';
@@ -16,13 +17,28 @@ export default function AddBsiScreen() {
   const [contactNumber, setContactNumber] = useState('');
   const [barangayId, setBarangayId] = useState('');
   const [barangays, setBarangays] = useState<BarangayOption[]>([]);
+  const [barangaysLoading, setBarangaysLoading] = useState(true);
+  const [barangaysError, setBarangaysError] = useState<string | null>(null);
   const [temporaryPassword, setTemporaryPassword] = useState('');
   const [saving, setSaving] = useState(false);
-  useEffect(() => {
-    void fetchBarangays().then(setBarangays).catch((error) => {
-      Alert.alert('Unable to Load Barangays', error instanceof Error ? error.message : 'Please try again.');
-    });
+  const loadBarangays = useCallback(async () => {
+    setBarangaysLoading(true);
+    setBarangaysError(null);
+    try {
+      setBarangays(await fetchBarangays());
+    } catch (error) {
+      setBarangaysError(
+        error instanceof Error
+          ? error.message
+          : 'The official barangay directory could not be loaded.'
+      );
+    } finally {
+      setBarangaysLoading(false);
+    }
   }, []);
+  useEffect(() => {
+    void loadBarangays();
+  }, [loadBarangays]);
   const barangayName = useMemo(
     () => barangays.find((item) => item.id === barangayId)?.name ?? '',
     [barangayId, barangays]
@@ -42,7 +58,13 @@ export default function AddBsiScreen() {
   };
   return (
     <ScreenContainer>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <KeyboardSafeView>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        automaticallyAdjustKeyboardInsets
+      >
         <Text style={styles.title}>Add BSI</Text>
         <Text style={styles.body}>Provision an authorized inspector. Account creation requires an internet connection.</Text>
         <AppInput label="FULL NAME" value={name} onChangeText={setName} />
@@ -54,12 +76,17 @@ export default function AddBsiScreen() {
           options={barangays.map((item) => ({ value: item.id, label: item.name }))}
           onChange={setBarangayId}
           placeholder="Select a barangay"
+          loading={barangaysLoading}
+          errorMessage={barangaysError}
+          emptyMessage="No active barangays are available in the official directory."
+          onRetry={() => void loadBarangays()}
         />
         <AppInput label="TEMPORARY PASSWORD" value={temporaryPassword} onChangeText={setTemporaryPassword} password />
         <Text style={styles.note}>Share the temporary credential through an approved private channel. It is never stored by the app.</Text>
         <AppButton title="Create BSI" loading={saving} onPress={() => void submit()} />
         <AppButton title="Cancel" variant="outline" disabled={saving} onPress={() => router.back()} />
       </ScrollView>
+      </KeyboardSafeView>
     </ScreenContainer>
   );
 }

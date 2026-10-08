@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   router,
   useFocusEffect,
-  useLocalSearchParams,
 } from 'expo-router';
 import {
   useCallback,
@@ -23,6 +22,7 @@ import {
 
 import PlaceCard from '@/components/places/PlaceCard';
 import KeyboardSafeView from '@/components/common/KeyboardSafeView';
+import EmptyState from '@/components/common/EmptyState';
 import TourOverlay, {
   TourTarget,
 } from '@/components/onboarding/TourOverlay';
@@ -48,11 +48,7 @@ export default function EstablishmentsScreen() {
   const { places, isLoading, error, refreshPlaces } = usePlaces();
   const { profile } = useAuth();
 
-  const { tour } = useLocalSearchParams<{
-    tour?: string;
-  }>();
-
-  const isTourActive = tour === 'true';
+  const isTourActive = false;
 
   const [search, setSearch] = useState('');
   const [selectedType, setSelectedType] =
@@ -114,7 +110,9 @@ export default function EstablishmentsScreen() {
       tourTarget === null
     ) {
       const timer = setTimeout(() => {
-        showTourStep(0);
+        searchRef.current?.measureInWindow((x, y, width, height) => {
+          setTourTarget({ x, y, width, height });
+        });
       }, 300);
 
       return () => clearTimeout(timer);
@@ -124,6 +122,7 @@ export default function EstablishmentsScreen() {
     isScreenFocused,
     isSearchReady,
     tourStep,
+    tourTarget,
   ]);
 
   const showTourStep = (index: number) => {
@@ -401,25 +400,11 @@ export default function EstablishmentsScreen() {
           </View>
         }
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <View style={styles.emptyIcon}>
-              <Ionicons
-                name="search-outline"
-                size={32}
-                color={COLORS.textMuted}
-              />
-            </View>
-
-            <Text style={styles.emptyTitle}>
-              {isLoading ? 'Loading places...' : 'No places found'}
-            </Text>
-
-            <Text style={styles.emptyText}>
-              {error
-                ? 'Places could not be refreshed. Check your connection and data access.'
-                : 'Try changing your search or place type.'}
-            </Text>
-          </View>
+          <EmptyState
+            icon={isLoading ? 'hourglass-outline' : 'business-outline'}
+            title={isLoading ? 'Loading places...' : 'No places found'}
+            description={error ? 'Places could not be refreshed. Check your connection and data access.' : 'Try changing your search or place type, or register a new place.'}
+          />
         }
       />
 

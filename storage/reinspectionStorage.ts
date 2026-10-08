@@ -121,3 +121,30 @@ export async function completeReinspection(
 
   return next.find((record) => record.id === reinspectionId);
 }
+
+export async function mergeReinspectionsFromServer(
+  serverRecords: ReinspectionRecord[],
+  scope: InspectionScope
+) {
+  const localRecords = await getReinspections(scope);
+  const byId = new Map(
+    serverRecords.map((record) => [record.id, record])
+  );
+
+  for (const localRecord of localRecords) {
+    const serverRecord = byId.get(localRecord.id);
+
+    // Preserve an on-device pending reschedule until it can upload. A server
+    // completion is authoritative and must not remain pending locally.
+    if (!serverRecord || serverRecord.status !== 'completed') {
+      byId.set(localRecord.id, localRecord);
+    }
+  }
+
+  const merged = [...byId.values()];
+  await AsyncStorage.setItem(
+    reinspectionsKey(scope),
+    JSON.stringify(merged)
+  );
+  return merged;
+}

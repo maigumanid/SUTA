@@ -6,6 +6,7 @@ import AppButton from '@/components/common/AppButton';
 import AppInput from '@/components/common/AppInput';
 import InitialsAvatar from '@/components/admin/InitialsAvatar';
 import OptionSelector from '@/components/admin/OptionSelector';
+import KeyboardSafeView from '@/components/common/KeyboardSafeView';
 import ScreenContainer from '@/components/common/ScreenContainer';
 import { COLORS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { fetchAdminBsis, fetchBarangays, reassignBsi, resetBsiPassword, setBsiActive } from '@/services/adminService';
@@ -34,16 +35,34 @@ export default function BsiAccountDetailScreen() {
     finally { setSaving(false); }
   };
   const barangayName = barangays.find((candidate) => candidate.id === barangayId)?.name ?? '';
+  const assignmentOptions = barangays.some(
+    (candidate) => candidate.id === item.barangayId
+  )
+    ? barangays
+    : [
+        {
+          id: item.barangayId,
+          name: `${item.barangayName} (current legacy assignment)`,
+        },
+        ...barangays,
+      ];
   return (
     <ScreenContainer>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <InitialsAvatar name={item.name} />
+      <KeyboardSafeView>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        automaticallyAdjustKeyboardInsets
+        showsVerticalScrollIndicator={false}
+      >
+        <InitialsAvatar name={item.name} avatarPath={item.avatarPath} />
         <Text style={styles.title}>{item.name}</Text><Text style={styles.body}>{item.email}</Text>
         <Text style={[styles.status, { color: item.active ? COLORS.compliant : COLORS.violation }]}>{item.active ? 'Active' : 'Inactive'}</Text>
         <Text style={styles.body}>{item.inspectionCount} inspections · {item.pendingReinspections} pending reinspections</Text>
         <Text style={styles.caption}>Last activity: {formatLocalDateTime(item.lastInspectionDate, 'No inspections yet')}</Text>
         <Text style={styles.section}>Barangay assignment</Text>
-        <OptionSelector label="ASSIGNED BARANGAY" value={barangayId} options={barangays.map((candidate) => ({ value: candidate.id, label: candidate.name }))} onChange={setBarangayId} />
+        <OptionSelector label="ASSIGNED BARANGAY" value={barangayId} options={assignmentOptions.map((candidate) => ({ value: candidate.id, label: candidate.name }))} onChange={setBarangayId} />
         <AppButton title="Save Barangay Assignment" loading={saving} disabled={!barangayId.trim() || !barangayName.trim()} onPress={() => void run(() => reassignBsi(item.id, barangayId.trim(), barangayName.trim()), 'Barangay assignment changed. Historical records were not modified.')} />
         <Text style={styles.section}>Account access</Text>
         <AppButton title={item.active ? 'Deactivate BSI' : 'Reactivate BSI'} variant={item.active ? 'danger' : 'primary'} loading={saving} onPress={() => Alert.alert(item.active ? 'Deactivate BSI?' : 'Reactivate BSI?', item.active ? 'The BSI will lose backend access. Historical records remain.' : 'The BSI will regain access to the assigned barangay.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Confirm', style: item.active ? 'destructive' : 'default', onPress: () => void run(() => setBsiActive(item.id, !item.active), item.active ? 'BSI deactivated.' : 'BSI reactivated.') }])} />
@@ -52,6 +71,7 @@ export default function BsiAccountDetailScreen() {
         <AppButton title="Reset Password" variant="outline" loading={saving} disabled={temporaryPassword.length < 8} onPress={() => Alert.alert('Reset Password?', 'The BSI will be required to change this temporary password after signing in.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Reset', onPress: () => void run(async () => { await resetBsiPassword(item.id, temporaryPassword); setTemporaryPassword(''); }, 'Temporary credential set.') }])} />
         <AppButton title="Back to BSI Accounts" variant="outline" onPress={() => router.back()} />
       </ScrollView>
+      </KeyboardSafeView>
     </ScreenContainer>
   );
 }

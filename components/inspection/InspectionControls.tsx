@@ -1,11 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import DateTimePicker, {
+  type DateTimePickerEvent,
+} from '@react-native-community/datetimepicker';
+import { useMemo, useState } from 'react';
 
 import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 
@@ -223,219 +225,33 @@ export function InspectionDateField({
   onChange,
   error,
 }: DateFieldProps) {
-  const [month, setMonth] = useState('');
-  const [day, setDay] = useState('');
-  const [year, setYear] = useState('');
-
-  const [localError, setLocalError] =
-    useState<string>();
-
-  useEffect(() => {
-    if (!value) {
-      return;
-    }
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-      return;
-    }
-
-    setMonth(
-      String(date.getMonth() + 1).padStart(
-        2,
-        '0'
-      )
-    );
-
-    setDay(
-      String(date.getDate()).padStart(
-        2,
-        '0'
-      )
-    );
-
-    setYear(
-      String(date.getFullYear())
-    );
+  const [showPicker, setShowPicker] = useState(false);
+  const selectedDate = useMemo(() => {
+    const parsed = value ? new Date(value) : new Date();
+    return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
   }, [value]);
-
-  const validateAndSave = (
-    newMonth: string,
-    newDay: string,
-    newYear: string
-  ) => {
-    if (
-      !newMonth ||
-      !newDay ||
-      newYear.length !== 4
-    ) {
-      setLocalError(undefined);
-      return;
-    }
-
-    const monthNumber =
-      Number(newMonth);
-
-    const dayNumber =
-      Number(newDay);
-
-    const yearNumber =
-      Number(newYear);
-
-    if (
-      Number.isNaN(monthNumber) ||
-      Number.isNaN(dayNumber) ||
-      Number.isNaN(yearNumber)
-    ) {
-      setLocalError(
-        'Enter a valid date.'
-      );
-
-      return;
-    }
-
-    if (
-      monthNumber < 1 ||
-      monthNumber > 12
-    ) {
-      setLocalError(
-        'Month must be between 1 and 12.'
-      );
-
-      return;
-    }
-
-    if (
-      dayNumber < 1 ||
-      dayNumber > 31
-    ) {
-      setLocalError(
-        'Enter a valid day.'
-      );
-
-      return;
-    }
-
-    const date = new Date(
-      yearNumber,
-      monthNumber - 1,
-      dayNumber
-    );
-
-    const validDate =
-      date.getFullYear() === yearNumber &&
-      date.getMonth() ===
-        monthNumber - 1 &&
-      date.getDate() === dayNumber;
-
-    if (!validDate) {
-      setLocalError(
-        'This date does not exist.'
-      );
-
-      return;
-    }
-
-    const today = new Date();
-
-    today.setHours(23, 59, 59, 999);
-
-    if (date > today) {
-      setLocalError(
-        'The testing date cannot be in the future.'
-      );
-
-      return;
-    }
-
-    setLocalError(undefined);
-
-    onChange(date.toISOString());
-  };
-
-  const handleMonth = (
-    text: string
-  ) => {
-    const cleaned = text
-      .replace(/[^0-9]/g, '')
-      .slice(0, 2);
-
-    setMonth(cleaned);
-
-    validateAndSave(
-      cleaned,
-      day,
-      year
-    );
-  };
-
-  const handleDay = (
-    text: string
-  ) => {
-    const cleaned = text
-      .replace(/[^0-9]/g, '')
-      .slice(0, 2);
-
-    setDay(cleaned);
-
-    validateAndSave(
-      month,
-      cleaned,
-      year
-    );
-  };
-
-  const handleYear = (
-    text: string
-  ) => {
-    const cleaned = text
-      .replace(/[^0-9]/g, '')
-      .slice(0, 4);
-
-    setYear(cleaned);
-
-    validateAndSave(
-      month,
-      day,
-      cleaned
-    );
-  };
-
-  const getFormattedDate = () => {
-    if (
-      !month ||
-      !day ||
-      year.length !== 4 ||
-      localError
-    ) {
-      return null;
-    }
-
-    const date = new Date(
-      Number(year),
-      Number(month) - 1,
-      Number(day)
-    );
-
-    if (
-      Number.isNaN(date.getTime())
-    ) {
-      return null;
-    }
-
-    return date.toLocaleDateString(
-      'en-PH',
-      {
+  const formattedDate = value
+    ? selectedDate.toLocaleDateString('en-PH', {
         month: 'long',
         day: 'numeric',
         year: 'numeric',
-      }
-    );
-  };
+      })
+    : null;
 
-  const formattedDate =
-    getFormattedDate();
+  const handleDateChange = (
+    event: DateTimePickerEvent,
+    nextDate?: Date
+  ) => {
+    setShowPicker(false);
+
+    if (event.type !== 'set' || !nextDate) {
+      return;
+    }
+
+    const normalized = new Date(nextDate);
+    normalized.setHours(12, 0, 0, 0);
+    onChange(normalized.toISOString());
+  };
 
   return (
     <View style={styles.dateContainer}>
@@ -444,90 +260,36 @@ export function InspectionDateField({
       </Text>
 
       <Text style={styles.dateHint}>
-        Enter the testing date.
+        Choose the testing date from the calendar.
       </Text>
 
-      <View style={styles.dateRow}>
-        <View style={styles.datePart}>
-          <Text
-            style={styles.datePartLabel}
-          >
-            Month
-          </Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label}. ${formattedDate ?? 'No date selected'}`}
+        onPress={() => setShowPicker(true)}
+        style={({ pressed }) => [
+          styles.dateButton,
+          error && styles.errorBorder,
+          pressed && styles.pressed,
+        ]}
+      >
+        <Ionicons name="calendar-outline" size={20} color={COLORS.primary} />
+        <Text style={formattedDate ? styles.dateValue : styles.datePlaceholder}>
+          {formattedDate ?? 'Select testing date'}
+        </Text>
+        <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+      </Pressable>
 
-          <TextInput
-            value={month}
-            onChangeText={handleMonth}
-            placeholder="MM"
-            placeholderTextColor={
-              COLORS.textMuted
-            }
-            keyboardType="number-pad"
-            maxLength={2}
-            style={[
-              styles.dateInput,
-              (error || localError) &&
-                styles.errorBorder,
-            ]}
-          />
-        </View>
+      {showPicker ? (
+        <DateTimePicker
+          value={selectedDate}
+          mode="date"
+          maximumDate={new Date()}
+          onChange={handleDateChange}
+        />
+      ) : null}
 
-        <View style={styles.datePart}>
-          <Text
-            style={styles.datePartLabel}
-          >
-            Day
-          </Text>
-
-          <TextInput
-            value={day}
-            onChangeText={handleDay}
-            placeholder="DD"
-            placeholderTextColor={
-              COLORS.textMuted
-            }
-            keyboardType="number-pad"
-            maxLength={2}
-            style={[
-              styles.dateInput,
-              (error || localError) &&
-                styles.errorBorder,
-            ]}
-          />
-        </View>
-
-        <View
-          style={[
-            styles.datePart,
-            styles.yearPart,
-          ]}
-        >
-          <Text
-            style={styles.datePartLabel}
-          >
-            Year
-          </Text>
-
-          <TextInput
-            value={year}
-            onChangeText={handleYear}
-            placeholder="YYYY"
-            placeholderTextColor={
-              COLORS.textMuted
-            }
-            keyboardType="number-pad"
-            maxLength={4}
-            style={[
-              styles.dateInput,
-              (error || localError) &&
-                styles.errorBorder,
-            ]}
-          />
-        </View>
-      </View>
-
-      {formattedDate &&
-        !localError && (
+      {formattedDate && (
           <View style={styles.validDate}>
             <Ionicons
               name="checkmark-circle"
@@ -545,13 +307,7 @@ export function InspectionDateField({
           </View>
         )}
 
-      {localError && (
-        <FieldError
-          text={localError}
-        />
-      )}
-
-      {!localError && error && (
+      {error && (
         <FieldError text={error} />
       )}
     </View>
@@ -689,37 +445,20 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
 
-  dateRow: {
+  dateButton: {
+    minHeight: 52,
     flexDirection: 'row',
-    gap: 8,
-  },
-
-  datePart: {
-    flex: 1,
-    gap: 5,
-  },
-
-  yearPart: {
-    flex: 1.3,
-  },
-
-  datePartLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.textMuted,
-  },
-
-  dateInput: {
-    height: 50,
+    alignItems: 'center',
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: RADIUS.md,
     backgroundColor: COLORS.surface,
-    textAlign: 'center',
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.text,
   },
+
+  dateValue: { flex: 1, fontSize: 14, fontWeight: '700', color: COLORS.text },
+  datePlaceholder: { flex: 1, fontSize: 14, color: COLORS.textMuted },
 
   validDate: {
     flexDirection: 'row',

@@ -10,8 +10,10 @@ import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { fetchAdminBsis, fetchBarangays } from '@/services/adminService';
 import type { AdminBsiSummary, BarangayOption } from '@/types/admin';
 import { formatLocalDateTime } from '@/utils/dateTime';
+import { useNetwork } from '@/context/NetworkContext';
 
 export default function AdminBsisScreen() {
+  const { isOnline } = useNetwork();
   const params = useLocalSearchParams<{ status?: string }>();
   const [items, setItems] = useState<AdminBsiSummary[]>([]);
   const [query, setQuery] = useState('');
@@ -27,6 +29,7 @@ export default function AdminBsisScreen() {
     }
   }, [params.status]);
   const load = useCallback(async () => {
+    if (isOnline === false) { setLoading(false); setError(null); return; }
     setLoading(true); setError(null);
     try {
       const [accounts, directory] = await Promise.all([fetchAdminBsis(), fetchBarangays()]);
@@ -34,7 +37,7 @@ export default function AdminBsisScreen() {
     }
     catch (caught) { setError(caught instanceof Error ? caught.message : 'Unable to load BSI accounts.'); }
     finally { setLoading(false); }
-  }, []);
+  }, [isOnline]);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -60,7 +63,7 @@ export default function AdminBsisScreen() {
       {!loading && filtered.length === 0 ? <Text style={adminStyles.empty}>No BSI accounts found.</Text> : null}
       {filtered.map((item) => (
         <Pressable key={item.id} style={[adminStyles.card, styles.accountCard]} onPress={() => router.push({ pathname: '/admin/bsi/[id]', params: { id: item.id } })}>
-          <InitialsAvatar name={item.name} />
+          <InitialsAvatar name={item.name} avatarPath={item.avatarPath} />
           <View style={styles.accountBody}><Text style={adminStyles.cardTitle}>{item.name}</Text>
           <Text style={adminStyles.body}>{item.email}</Text>
           <Text style={adminStyles.body}>{item.barangayName}</Text>

@@ -20,7 +20,7 @@ export default function ReportEvidencePreview({ record }: { record: InspectionRe
     let active = true; setLoading(true);
     void Promise.all(record.findings.map(async (finding, findingIndex) => {
       const items = await Promise.all(finding.evidence.map(async (item) => {
-        try { const attachment: EvidenceAttachment = { id: item.id, uri: await createInspectionEvidenceSignedUrl(item.storagePath), source: 'library', createdAt: record.inspectionDate, mimeType: item.mimeType }; return attachment; } catch { return null; }
+        try { const attachment: EvidenceAttachment = { id: item.id, uri: await createInspectionEvidenceSignedUrl(item.storagePath), storagePath: item.storagePath, source: 'library', createdAt: record.inspectionDate, mimeType: item.mimeType }; return attachment; } catch { return null; }
       }));
       return [findingIndex, items.filter((item): item is EvidenceAttachment => item !== null)] as const;
     })).then((entries) => { if (active) setEvidence(Object.fromEntries(entries)); }).finally(() => { if (active) setLoading(false); });

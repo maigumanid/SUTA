@@ -7,7 +7,7 @@ import {
 import {
   type InspectionScope,
   type StoredInspection,
-  updateInspectionSyncStatus,
+  updateInspectionEvidenceStoragePaths,
 } from '@/storage/inspectionStorage';
 import type { ReinspectionRecord } from '@/storage/reinspectionStorage';
 
@@ -16,36 +16,52 @@ export async function uploadInspection(
   scope: InspectionScope,
   completedReinspection?: ReinspectionRecord
 ) {
+  const backendFindings = await uploadSupabaseInspectionEvidence(
+    inspection.id,
+    inspection.findings,
+    scope
+  );
   try {
-    const backendFindings = await uploadSupabaseInspectionEvidence(
+    await updateInspectionEvidenceStoragePaths(
       inspection.id,
-      inspection.findings,
+      backendFindings,
       scope
     );
+  } catch (error) {
+    // Remote synchronization remains authoritative. Losing this optional
+    // local fallback metadata must not prevent the idempotent RPC submission.
+    console.warn('Unable to cache remote evidence metadata locally:', error);
+  }
 
-    if (completedReinspection) {
-      await ensureSupabaseReinspectionSchedule(completedReinspection);
-    }
+  return finishInspectionUpload(
+    inspection,
+    backendFindings,
+    completedReinspection
+  );
+}
 
-    await submitSupabaseInspection(inspection, backendFindings);
+async function finishInspectionUpload(
+  inspection: StoredInspection,
+  backendFindings: Awaited<ReturnType<typeof uploadSupabaseInspectionEvidence>>,
+  completedReinspection?: ReinspectionRecord
+) {
+  if (completedReinspection) {
+    await ensureSupabaseReinspectionSchedule(completedReinspection);
+  }
 
-    if (completedReinspection) {
-      if (!completedReinspection.completedInspectionId) {
-        throw new Error(
-          'A completed reinspection must reference its follow-up inspection.'
-        );
-      }
+  await submitSupabaseInspection(inspection, backendFindings);
 
-      await completeSupabaseReinspection(
-        completedReinspection,
-        completedReinspection.completedInspectionId,
-        completedReinspection.completedAt
+  if (completedReinspection) {
+    if (!completedReinspection.completedInspectionId) {
+      throw new Error(
+        'A completed reinspection must reference its follow-up inspection.'
       );
     }
 
-    await updateInspectionSyncStatus(inspection.id, 'synced', scope);
-  } catch (error) {
-    await updateInspectionSyncStatus(inspection.id, 'failed', scope);
-    throw error;
+    await completeSupabaseReinspection(
+      completedReinspection,
+      completedReinspection.completedInspectionId,
+      completedReinspection.completedAt
+    );
   }
 }

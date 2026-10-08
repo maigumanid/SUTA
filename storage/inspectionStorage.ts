@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { HouseholdInspection } from '@/types/householdInspection';
+import type { BackendInspectionFinding } from '@/types/householdInspection';
+import { ensureInspectionEvidenceDurable } from '@/storage/evidenceFileStorage';
 
 export type InspectionScope = {
   bsiUid: string;
@@ -23,7 +25,22 @@ export type StoredInspection =
     barangayId: string;
     savedAt: string;
     syncStatus: InspectionSyncStatus;
+    syncFailureStage?: InspectionSyncFailureStage;
+    syncFailureReason?: string;
+    syncErrorCode?: string;
+    syncErrorMessage?: string;
+    syncErrorDetails?: string;
+    syncErrorHint?: string;
+    lastSyncAttemptAt?: string;
   };
+
+export type InspectionSyncFailureStage =
+  | 'preparation'
+  | 'evidence_file_resolution'
+  | 'evidence_upload'
+  | 'inspection_submission'
+  | 'reinspection_linkage'
+  | 'remote_confirmation';
 
 async function readStoredInspections(
   scope: InspectionScope
@@ -64,6 +81,37 @@ export async function getStoredInspections(scope: InspectionScope): Promise<
   }
 }
 
+async function writeInspectionsWithCacheRecovery(
+  inspections: StoredInspection[],
+  scope: InspectionScope
+) {
+  try {
+    await AsyncStorage.setItem(inspectionsKey(scope), JSON.stringify(inspections));
+  } catch (initialError) {
+    // Working inspection data outranks downloaded history. Reclaim only the
+    // removable cache, then retry the exact same queue write once.
+    try {
+      const { clearDownloadedInspectionHistory, cleanupOfflineStorage } =
+        await import('@/storage/inspectionHistoryCache');
+      await cleanupOfflineStorage(scope);
+      await clearDownloadedInspectionHistory(scope);
+    } catch (cleanupError) {
+      console.warn('Safe history cleanup could not reclaim storage:', cleanupError);
+    }
+
+    try {
+      const newest = inspections[0];
+      const afterCleanup = await readStoredInspections(scope);
+      const recovered = newest
+        ? [newest, ...afterCleanup.filter((item) => item.id !== newest.id)]
+        : afterCleanup;
+      await AsyncStorage.setItem(inspectionsKey(scope), JSON.stringify(recovered));
+    } catch {
+      throw initialError;
+    }
+  }
+}
+
 export async function getStoredInspectionsForPlace(
   placeId: string,
   scope: InspectionScope
@@ -92,9 +140,10 @@ export async function saveInspectionLocally(
 
     const now = new Date();
 
+    const durableInspection = ensureInspectionEvidenceDurable(inspection);
     const savedInspection: StoredInspection =
       {
-        ...inspection,
+        ...durableInspection,
 
         id:
           inspection.id ||
@@ -110,10 +159,7 @@ export async function saveInspectionLocally(
       ...inspections,
     ];
 
-    await AsyncStorage.setItem(
-      inspectionsKey(inspection),
-      JSON.stringify(updatedInspections)
-    );
+    await writeInspectionsWithCacheRecovery(updatedInspections, inspection);
 
     return savedInspection;
   } catch (error) {
@@ -157,7 +203,15 @@ export async function getPendingInspections(scope: InspectionScope): Promise<
 export async function updateInspectionSyncStatus(
   inspectionId: string,
   status: InspectionSyncStatus,
-  scope: InspectionScope
+  scope: InspectionScope,
+  failure?: {
+    stage: InspectionSyncFailureStage;
+    reason: string;
+    code?: string;
+    message?: string;
+    details?: string;
+    hint?: string;
+  }
 ): Promise<void> {
   const inspections =
     await getStoredInspections(scope);
@@ -173,6 +227,24 @@ export async function updateInspectionSyncStatus(
       return {
         ...inspection,
         syncStatus: status,
+        lastSyncAttemptAt: new Date().toISOString(),
+        ...(status === 'failed' && failure
+          ? {
+              syncFailureStage: failure.stage,
+              syncFailureReason: failure.reason,
+              syncErrorCode: failure.code,
+              syncErrorMessage: failure.message,
+              syncErrorDetails: failure.details,
+              syncErrorHint: failure.hint,
+            }
+          : {
+              syncFailureStage: undefined,
+              syncFailureReason: undefined,
+              syncErrorCode: undefined,
+              syncErrorMessage: undefined,
+              syncErrorDetails: undefined,
+              syncErrorHint: undefined,
+            }),
       };
     });
 
@@ -204,5 +276,48 @@ export async function deleteStoredInspection(
 export async function clearStoredInspections(scope: InspectionScope): Promise<void> {
   await AsyncStorage.removeItem(
     inspectionsKey(scope)
+  );
+}
+
+/** Internal retention helper. Callers must preserve Pending and Failed rows. */
+export async function replaceStoredInspections(
+  inspections: StoredInspection[],
+  scope: InspectionScope
+) {
+  await AsyncStorage.setItem(inspectionsKey(scope), JSON.stringify(inspections));
+}
+
+export async function updateInspectionEvidenceStoragePaths(
+  inspectionId: string,
+  backendFindings: BackendInspectionFinding[],
+  scope: InspectionScope
+): Promise<void> {
+  const inspections = await getStoredInspections(scope);
+  const storagePaths = new Map(
+    backendFindings.flatMap((finding) =>
+      finding.evidence.map((evidence) => [evidence.id, evidence.storagePath] as const)
+    )
+  );
+
+  const updatedInspections = inspections.map((inspection) =>
+    inspection.id !== inspectionId
+      ? inspection
+      : {
+          ...inspection,
+          findings: inspection.findings.map((finding) => ({
+            ...finding,
+            evidence: finding.evidence.map((evidence) => ({
+              ...evidence,
+              ...(storagePaths.get(evidence.id)
+                ? { storagePath: storagePaths.get(evidence.id) }
+                : {}),
+            })),
+          })),
+        }
+  );
+
+  await AsyncStorage.setItem(
+    inspectionsKey(scope),
+    JSON.stringify(updatedInspections)
   );
 }
