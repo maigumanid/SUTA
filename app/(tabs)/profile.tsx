@@ -85,7 +85,7 @@ function Divider() { return <View style={styles.divider} />; }
 
 const styles = StyleSheet.create({
   container: { paddingTop: SPACING.xxl, paddingBottom: SPACING.section, gap: SPACING.xl },
-  title: { fontSize: 29, lineHeight: 35, letterSpacing: -0.5, fontWeight: '800', color: COLORS.text },
+  title: { ...TYPOGRAPHY.display, fontSize: 29, lineHeight: 35, color: COLORS.text },
   subtitle: { ...TYPOGRAPHY.bodySmall, marginTop: SPACING.xs, color: COLORS.textSecondary },
   hero: { minHeight: 168, position: 'relative', overflow: 'hidden', flexDirection: 'row', alignItems: 'center', gap: SPACING.lg, padding: SPACING.xl, backgroundColor: COLORS.primaryDeep, borderRadius: RADIUS.xxl, ...SHADOWS.card },
   heroGlow: { position: 'absolute', width: 180, height: 180, borderRadius: 90, right: -55, top: -70, backgroundColor: 'rgba(71,184,174,0.22)' },

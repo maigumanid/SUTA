@@ -35,12 +35,12 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/suta/branding/suta-wordmark.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#F4F3EE",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#F4F3EE"
           }
         }
       ],

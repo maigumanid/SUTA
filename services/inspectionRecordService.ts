@@ -103,7 +103,19 @@ function findings(value: Json): InspectionRecordFinding[] {
       }];
     }) : [];
     const category = textValue(item.category) ?? 'other';
-    return [{ category: category === 'safe_water_supply' ? 'Safe Water Supply' : category === 'sanitation' ? 'Sanitation' : readable(category), description: textValue(item.details)?.trim() || 'No description recorded.', evidence }];
+    const corrective = item.correctiveAction;
+    const correctiveAction: InspectionRecordFinding['correctiveAction'] = corrective && typeof corrective === 'object' && !Array.isArray(corrective)
+      && typeof corrective.originalInspectionId === 'string'
+      && typeof corrective.originalFindingId === 'string'
+      && (corrective.status === 'Unresolved' || corrective.status === 'Partially Corrected' || corrective.status === 'Corrected')
+      ? {
+          originalInspectionId: corrective.originalInspectionId,
+          originalFindingId: corrective.originalFindingId,
+          status: corrective.status,
+          ...(typeof corrective.verificationNote === 'string' ? { verificationNote: corrective.verificationNote } : {}),
+        }
+      : undefined;
+    return [{ category: category === 'safe_water_supply' ? 'Safe Water Supply' : category === 'sanitation' ? 'Sanitation' : readable(category), description: textValue(item.details)?.trim() || 'No description recorded.', evidence, ...(correctiveAction ? { correctiveAction } : {}) }];
   });
 }
 

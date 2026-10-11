@@ -15,21 +15,28 @@ import {
 } from 'react-native';
 
 import EvidencePreviewGallery from '@/components/inspection/EvidencePreviewGallery';
+import CorrectiveFindingComparison from '@/components/inspection/CorrectiveFindingComparison';
+import InspectionProgress from '@/components/inspection/InspectionProgress';
+import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useInspectionSync } from '@/context/InspectionSyncContext';
 import { useInspection } from '@/context/InspectionContext';
 import { useAuth } from '@/context/AuthContext';
 import { usePlaces } from '@/context/PlacesContext';
+import { fetchStoredInspectionById } from '@/services/inspectionHistoryService';
 import {
+  getStoredInspectionById,
   getStoredInspectionsForPlace,
   saveInspectionLocally,
   type StoredInspection,
 } from '@/storage/inspectionStorage';
+import { getCachedInspectionById } from '@/storage/inspectionHistoryCache';
 import { completeReinspection } from '@/storage/reinspectionStorage';
 import {
   getInspectionSyncErrorMessage,
 } from '@/services/inspectionSyncService';
 import { formatLocalDate, formatLocalDateTime } from '@/utils/dateTime';
 import { getInspectionTypeLabel } from '@/utils/inspectionDisplay';
+import { formatPurok } from '@/utils/placeDisplay';
 import { getNetworkAvailability } from '@/utils/networkState';
 import { calculateInspectionRisk, getRiskClassification } from '@/utils/riskClassification';
 
@@ -51,6 +58,11 @@ export default function InspectionSummaryScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [placeHistory, setPlaceHistory] =
     useState<StoredInspection[]>([]);
+  const [originalInspections, setOriginalInspections] = useState<
+    Record<string, StoredInspection>
+  >({});
+  const [isLoadingOriginalEvidence, setIsLoadingOriginalEvidence] =
+    useState(false);
 
   const place = draftInspection
     ? getPlaceById(draftInspection.placeId)
@@ -60,14 +72,70 @@ export default function InspectionSummaryScreen() {
   useEffect(() => {
     if (!draftInspection || !profile) {
       setPlaceHistory([]);
+      setOriginalInspections({});
+      setIsLoadingOriginalEvidence(false);
       return;
     }
-
-    void getStoredInspectionsForPlace(draftInspection.placeId, {
+    let active = true;
+    const scope = {
       bsiUid: profile.uid,
       barangayId: profile.assignedBarangayId,
-    }).then(setPlaceHistory);
-  }, [draftInspection, profile]);
+    };
+    const originalIds = [...new Set(
+      draftInspection.findings.flatMap((finding) =>
+        finding.correctiveAction
+          ? [finding.correctiveAction.originalInspectionId]
+          : []
+      )
+    )];
+
+    void (async () => {
+      setIsLoadingOriginalEvidence(originalIds.length > 0);
+      try {
+        const localHistory = await getStoredInspectionsForPlace(
+          draftInspection.placeId,
+          scope
+        );
+        if (!active) return;
+        setPlaceHistory(localHistory);
+
+        const originals = await Promise.all(
+          originalIds.map(async (originalId) => {
+            try {
+              let original = localHistory.find((record) => record.id === originalId)
+                ?? await getStoredInspectionById(originalId, scope)
+                ?? await getCachedInspectionById(originalId, scope);
+              if (!original && isOnline !== false) {
+                original = await fetchStoredInspectionById(originalId, scope);
+              }
+              return original ? ([originalId, original] as const) : null;
+            } catch (error) {
+              console.warn(`Unable to load original inspection ${originalId}:`, error);
+              return null;
+            }
+          })
+        );
+        if (active) {
+          setOriginalInspections(
+            Object.fromEntries(
+              originals.filter(
+                (entry): entry is readonly [string, StoredInspection] => entry !== null
+              )
+            )
+          );
+        }
+      } catch (error) {
+        console.warn('Unable to load linked original evidence for review:', error);
+        if (active) setOriginalInspections({});
+      } finally {
+        if (active) setIsLoadingOriginalEvidence(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [draftInspection, isOnline, profile]);
 
   const resetInspectionFlowTo = (
     pathname: '/place/[id]' | '/(tabs)/sync',
@@ -382,6 +450,10 @@ export default function InspectionSummaryScreen() {
 
   const location =
     draftInspection.inspectionLocation;
+  const evidenceCount = draftInspection.findings.reduce(
+    (total, finding) => total + finding.evidence.length,
+    0
+  );
 
   const locationStatus = (() => {
     if (location) {
@@ -443,6 +515,8 @@ export default function InspectionSummaryScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
       >
+        <InspectionProgress currentStep={5} placeName={place?.name} />
+
         <View style={styles.infoCard}>
           <Ionicons
             name="information-circle-outline"
@@ -459,7 +533,7 @@ export default function InspectionSummaryScreen() {
 
         <Section
           icon="calendar-outline"
-          title="Inspection Information"
+          title="Place & Inspection"
         >
           <ReviewRow
             label="Inspection Date"
@@ -475,10 +549,11 @@ export default function InspectionSummaryScreen() {
           />
 
           {place ? (
-            <ReviewRow
-              label="Location"
-              value={`${place.purok} · ${place.barangay ?? profile?.assignedBarangay ?? 'Assigned barangay'}`}
-            />
+            <>
+              <ReviewRow label="Household Representative" value={place.representativeName} />
+              <ReviewRow label="Location" value={`${formatPurok(place.purok)} · ${place.barangay ?? profile?.assignedBarangay ?? 'Assigned barangay'}`} />
+              <ReviewRow label="Address" value={place.address} />
+            </>
           ) : null}
 
           <ReviewRow
@@ -553,80 +628,6 @@ export default function InspectionSummaryScreen() {
         </Section>
 
         <Section
-          icon="flask-outline"
-          title="Microbial Testing"
-          optional
-        >
-          {!water.microbialTest.recorded ? (
-            <Text style={styles.notRecorded}>
-              No microbial test recorded.
-            </Text>
-          ) : (
-            <>
-              <ReviewRow
-                label="Date Validation Done"
-                value={formatLocalDate(
-                  water.microbialTest
-                    .dateValidationDone,
-                  'Not recorded'
-                )}
-              />
-
-              <ReviewRow
-                label="E. coli Result"
-                value={
-                  water.microbialTest
-                    .eColiResult === 1
-                    ? 'Presence of E. coli'
-                    : water.microbialTest
-                          .eColiResult === 0
-                      ? 'Absence of E. coli'
-                      : 'Not recorded'
-                }
-                last
-              />
-            </>
-          )}
-        </Section>
-
-        <Section
-          icon="beaker-outline"
-          title="Arsenic Testing"
-          optional
-        >
-          {!water.arsenicTest.conducted ? (
-            <Text style={styles.notRecorded}>
-              No arsenic test recorded.
-            </Text>
-          ) : (
-            <>
-              <ReviewRow
-                label="Date Testing Done"
-                value={formatLocalDate(
-                  water.arsenicTest
-                    .dateTestingDone,
-                  'Not recorded'
-                )}
-              />
-
-              <ReviewRow
-                label="Arsenic Result"
-                value={
-                  water.arsenicTest
-                    .result === 1
-                    ? 'Within allowable PNSDW limit'
-                    : water.arsenicTest
-                          .result === 0
-                      ? 'Above allowable PNSDW limit'
-                      : 'Not recorded'
-                }
-                last
-              />
-            </>
-          )}
-        </Section>
-
-        <Section
           icon="home-outline"
           title="Sanitation Facility"
         >
@@ -669,27 +670,63 @@ export default function InspectionSummaryScreen() {
           />
         </Section>
 
+        <Section icon="flask-outline" title="Laboratory Testing" optional>
+          <Text style={styles.reviewGroupLabel}>MICROBIAL</Text>
+          <ReviewRow label="Test Performed" value={water.microbialTest.recorded ? 'Yes' : 'No'} />
+          {water.microbialTest.recorded ? (
+            <>
+              <ReviewRow label="Testing Date" value={formatLocalDate(water.microbialTest.dateValidationDone, 'Not recorded')} />
+              <ReviewRow label="Result" value={water.microbialTest.eColiResult === 1 ? 'Presence of E. coli' : water.microbialTest.eColiResult === 0 ? 'Absence of E. coli' : 'Not recorded'} />
+            </>
+          ) : null}
+
+          <Text style={styles.reviewGroupLabel}>ARSENIC</Text>
+          <ReviewRow label="Test Performed" value={water.arsenicTest.conducted ? 'Yes' : 'No'} last={!water.arsenicTest.conducted} />
+          {water.arsenicTest.conducted ? (
+            <>
+              <ReviewRow label="Testing Date" value={formatLocalDate(water.arsenicTest.dateTestingDone, 'Not recorded')} />
+              <ReviewRow label="Result" value={water.arsenicTest.result === 1 ? 'Within allowable PNSDW limit' : water.arsenicTest.result === 0 ? 'Above allowable PNSDW limit' : 'Not recorded'} last />
+            </>
+          ) : null}
+        </Section>
+
         <Section
           icon="alert-circle-outline"
-          title="Inspection Result & Findings"
+          title="Findings"
         >
-          <ReviewRow
-            label="Result"
-            value={getInspectionResult()}
-          />
-          <ReviewRow
-            label="Risk Level"
-            value={risk ? `${getRiskClassification(risk.level).label}${risk.percentage === null ? '' : ` (${Math.round(risk.percentage)}%)`}` : 'Not yet classified'}
-            last={draftInspection.findings.length === 0}
-          />
-
           {draftInspection.findings.length === 0 ? (
             <Text style={styles.notRecorded}>
               No findings recorded.
             </Text>
           ) : (
-            draftInspection.findings.map(
-              (finding, index) => (
+            draftInspection.findings.map((finding, index) => {
+              if (finding.correctiveAction) {
+                const original = originalInspections[
+                  finding.correctiveAction.originalInspectionId
+                ];
+                const originalFinding = original?.findings.find(
+                  (candidate) =>
+                    candidate.id === finding.correctiveAction?.originalFindingId
+                );
+
+                return (
+                  <CorrectiveFindingComparison
+                    key={finding.id}
+                    afterEvidence={finding.evidence}
+                    beforeEvidence={originalFinding?.evidence ?? []}
+                    beforeLoading={isLoadingOriginalEvidence}
+                    beforeUnavailable={!isLoadingOriginalEvidence && !original}
+                    category={getFindingCategory(finding.category)}
+                    divided={index > 0}
+                    findingNumber={index + 1}
+                    originalDescription={originalFinding?.details ?? finding.details}
+                    status={finding.correctiveAction.status}
+                    verificationNote={finding.correctiveAction.verificationNote}
+                  />
+                );
+              }
+
+              return (
                 <View
                   key={finding.id}
                   style={[
@@ -706,10 +743,16 @@ export default function InspectionSummaryScreen() {
                   </Text>
                   <EvidencePreviewGallery evidence={finding.evidence} />
                 </View>
-              )
-            )
+              );
+            })
           )}
         </Section>
+
+        {!draftInspection.findings.some((finding) => finding.correctiveAction) ? (
+          <Section icon="images-outline" title="Evidence" optional>
+            <ReviewRow label="Photo Evidence" value={`${evidenceCount} ${evidenceCount === 1 ? 'photo' : 'photos'} attached to findings`} last />
+          </Section>
+        ) : null}
 
         <Section
           icon="document-text-outline"
@@ -726,6 +769,22 @@ export default function InspectionSummaryScreen() {
             {draftInspection.remarks.trim() ||
               'No remarks recorded.'}
           </Text>
+        </Section>
+
+        <Section icon="shield-checkmark-outline" title="Result & Risk">
+          <ReviewRow label="Result" value={getInspectionResult()} />
+          <ReviewRow
+            label="Risk Level"
+            value={risk ? `${getRiskClassification(risk.level).label}${risk.percentage === null ? '' : ` (${Math.round(risk.percentage)}%)`}` : 'Not yet classified'}
+            last={!(draftInspection.reinspectionId || draftInspection.reinspectionOfInspectionId || draftInspection.result === 'for_reinspection')}
+          />
+          {draftInspection.reinspectionId || draftInspection.reinspectionOfInspectionId || draftInspection.result === 'for_reinspection' ? (
+            <ReviewRow
+              label="Reinspection"
+              value={draftInspection.reinspectionId ? 'Scheduled follow-up inspection in progress' : draftInspection.reinspectionOfInspectionId ? 'Linked to the original inspection' : 'Reinspection required'}
+              last
+            />
+          ) : null}
         </Section>
 
         <Pressable
@@ -873,7 +932,7 @@ function ReviewRow({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#F4F3EE',
+    backgroundColor: COLORS.background,
   },
 
   header: {
@@ -884,8 +943,8 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#D8DDD9',
-    backgroundColor: '#FFFFFF',
+    borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.surface,
   },
 
   backButton: {
@@ -894,7 +953,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
-    backgroundColor: '#EEF7F5',
+    backgroundColor: COLORS.primarySoft,
   },
 
   headerTextContainer: {
@@ -902,15 +961,15 @@ const styles = StyleSheet.create({
   },
 
   headerTitle: {
+    ...TYPOGRAPHY.heading,
     fontSize: 19,
-    fontWeight: '800',
-    color: '#17211F',
+    color: COLORS.text,
   },
 
   headerSubtitle: {
+    ...TYPOGRAPHY.tiny,
     marginTop: 2,
-    fontSize: 11,
-    color: '#5F6B68',
+    color: COLORS.textSecondary,
   },
 
   headerIcon: {
@@ -919,11 +978,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 21,
-    backgroundColor: '#EEF7F5',
+    backgroundColor: COLORS.primarySoft,
   },
 
   content: {
-    padding: 18,
+    width: '100%',
+    maxWidth: 700,
+    alignSelf: 'center',
+    padding: SPACING.lg,
     paddingBottom: 60,
     gap: 16,
   },
@@ -934,22 +996,22 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 14,
     borderRadius: 14,
-    backgroundColor: '#EEF7F5',
+    backgroundColor: COLORS.primarySoft,
   },
 
   infoText: {
+    ...TYPOGRAPHY.caption,
     flex: 1,
-    fontSize: 12,
     lineHeight: 18,
-    color: '#5F6B68',
+    color: COLORS.textSecondary,
   },
 
   section: {
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#D8DDD9',
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.xl,
+    backgroundColor: COLORS.surface,
   },
 
   sectionHeader: {
@@ -958,7 +1020,7 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#E7E9E6',
+    borderBottomColor: COLORS.divider,
   },
 
   sectionIcon: {
@@ -967,13 +1029,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 19,
-    backgroundColor: '#EEF7F5',
+    backgroundColor: COLORS.primarySoft,
   },
 
   sectionTitle: {
+    ...TYPOGRAPHY.bodyMedium,
     fontSize: 14,
-    fontWeight: '800',
-    color: '#17211F',
+    color: COLORS.text,
   },
 
   optional: {
@@ -997,21 +1059,19 @@ const styles = StyleSheet.create({
 
   reviewRowBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: '#E7E9E6',
+    borderBottomColor: COLORS.divider,
   },
 
   reviewLabel: {
+    ...TYPOGRAPHY.tiny,
     marginBottom: 4,
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#89918F',
+    color: COLORS.textMuted,
   },
 
   reviewValue: {
-    fontSize: 13,
+    ...TYPOGRAPHY.caption,
     lineHeight: 19,
-    fontWeight: '600',
-    color: '#17211F',
+    color: COLORS.text,
   },
 
   notRecorded: {
@@ -1047,9 +1107,9 @@ const styles = StyleSheet.create({
   },
 
   saveButtonText: {
+    ...TYPOGRAPHY.button,
     fontSize: 14,
-    fontWeight: '800',
-    color: '#FFFFFF',
+    color: COLORS.white,
   },
 
   editButton: {
@@ -1061,9 +1121,8 @@ const styles = StyleSheet.create({
   },
 
   editButtonText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#075E5A',
+    ...TYPOGRAPHY.label,
+    color: COLORS.primary,
   },
 
   offlineCard: {
@@ -1073,6 +1132,15 @@ const styles = StyleSheet.create({
     padding: 13,
     borderRadius: 12,
     backgroundColor: '#FFFFFF',
+  },
+
+  reviewGroupLabel: {
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.xs,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    color: COLORS.primary,
   },
 
   offlineCardActive: {

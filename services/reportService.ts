@@ -18,7 +18,24 @@ const QUERY_PAGE_SIZE = 500;
 const HYDRATION_BATCH_SIZE = 50;
 const risks: readonly RiskLevel[] = ['Low', 'Moderate', 'High', 'Unclassified'];
 
-type PlaceRow = Database['public']['Tables']['places']['Row'];
+type PlaceRow = Pick<
+  Database['public']['Tables']['places']['Row'],
+  | 'id'
+  | 'name'
+  | 'address'
+  | 'purok'
+  | 'barangay_id'
+  | 'barangay_name'
+  | 'place_type'
+  | 'status'
+  | 'risk_level'
+  | 'last_inspection_date'
+  | 'created_at'
+  | 'created_by_uid'
+  | 'representative_name'
+  | 'updated_at'
+  | 'updated_by_uid'
+>;
 type InspectionRow = Database['public']['Tables']['inspections']['Row'];
 type ReinspectionRow = Database['public']['Tables']['reinspections']['Row'];
 

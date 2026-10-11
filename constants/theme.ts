@@ -199,87 +199,97 @@ export const FONT_WEIGHT = {
   extraBold: '800' as const,
 };
 
+export const FONT_FAMILY = {
+  heading: 'Manrope_700Bold',
+  headingStrong: 'Manrope_800ExtraBold',
+  headingMedium: 'Manrope_600SemiBold',
+  body: 'Inter_400Regular',
+  bodyMedium: 'Inter_500Medium',
+  bodyStrong: 'Inter_600SemiBold',
+  bodyBold: 'Inter_700Bold',
+} as const;
+
 
 export const TYPOGRAPHY = {
   hero: {
+    fontFamily: FONT_FAMILY.headingStrong,
     fontSize: FONT_SIZE.hero,
-    fontWeight: FONT_WEIGHT.bold,
     lineHeight: 44,
     letterSpacing: -1,
   },
 
   display: {
+    fontFamily: FONT_FAMILY.headingStrong,
     fontSize: FONT_SIZE.display,
-    fontWeight: FONT_WEIGHT.bold,
     lineHeight: 38,
     letterSpacing: -0.6,
   },
 
   title: {
+    fontFamily: FONT_FAMILY.heading,
     fontSize: FONT_SIZE.xxl,
-    fontWeight: FONT_WEIGHT.bold,
     lineHeight: 30,
     letterSpacing: -0.3,
   },
 
   heading: {
+    fontFamily: FONT_FAMILY.heading,
     fontSize: FONT_SIZE.xl,
-    fontWeight: FONT_WEIGHT.bold,
     lineHeight: 26,
   },
 
   subheading: {
+    fontFamily: FONT_FAMILY.headingMedium,
     fontSize: FONT_SIZE.lg,
-    fontWeight: FONT_WEIGHT.semiBold,
     lineHeight: 24,
   },
 
   body: {
+    fontFamily: FONT_FAMILY.body,
     fontSize: FONT_SIZE.base,
-    fontWeight: FONT_WEIGHT.regular,
     lineHeight: 24,
   },
 
   bodyMedium: {
+    fontFamily: FONT_FAMILY.bodyStrong,
     fontSize: FONT_SIZE.base,
-    fontWeight: FONT_WEIGHT.semiBold,
     lineHeight: 24,
   },
 
   bodySmall: {
+    fontFamily: FONT_FAMILY.body,
     fontSize: FONT_SIZE.md,
-    fontWeight: FONT_WEIGHT.regular,
     lineHeight: 21,
   },
 
   label: {
+    fontFamily: FONT_FAMILY.heading,
     fontSize: FONT_SIZE.sm,
-    fontWeight: FONT_WEIGHT.bold,
     lineHeight: 18,
     letterSpacing: 0.7,
   },
 
   button: {
+    fontFamily: FONT_FAMILY.heading,
     fontSize: FONT_SIZE.base,
-    fontWeight: FONT_WEIGHT.semiBold,
     lineHeight: 22,
   },
 
   caption: {
+    fontFamily: FONT_FAMILY.body,
     fontSize: FONT_SIZE.sm,
-    fontWeight: FONT_WEIGHT.regular,
     lineHeight: 18,
   },
 
   tiny: {
+    fontFamily: FONT_FAMILY.bodyMedium,
     fontSize: FONT_SIZE.xs,
-    fontWeight: FONT_WEIGHT.medium,
     lineHeight: 15,
   },
 
   metric: {
+    fontFamily: FONT_FAMILY.headingStrong,
     fontSize: 30,
-    fontWeight: FONT_WEIGHT.bold,
     lineHeight: 36,
     letterSpacing: -0.5,
   },
@@ -644,6 +654,8 @@ export const THEME = {
   fontSize: FONT_SIZE,
 
   fontWeight: FONT_WEIGHT,
+
+  fontFamily: FONT_FAMILY,
 
   typography: TYPOGRAPHY,
 

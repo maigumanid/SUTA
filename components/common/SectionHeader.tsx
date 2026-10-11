@@ -35,11 +35,11 @@ export default function SectionHeader({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
-  copy: { flex: 1 },
+  row: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.md },
+  copy: { flex: 1, minWidth: 0 },
   title: { ...TYPOGRAPHY.heading, color: COLORS.text },
   subtitle: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, marginTop: SPACING.xs },
-  action: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, paddingVertical: SPACING.sm },
+  action: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, paddingVertical: SPACING.sm },
   actionText: { ...TYPOGRAPHY.caption, color: COLORS.primary, fontWeight: '700' },
   pressed: { opacity: 0.65 },
 });

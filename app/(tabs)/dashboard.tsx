@@ -1,4 +1,5 @@
 import {
+  type Href,
   router,
   useFocusEffect,
 } from 'expo-router';
@@ -11,6 +12,7 @@ import {
 } from 'react';
 
 import {
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,15 +20,12 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import QuickActionCard from '@/components/common/QuickActionCard';
 import EntranceTransition from '@/components/common/EntranceTransition';
 import SectionHeader from '@/components/common/SectionHeader';
 import SurfaceCard from '@/components/common/SurfaceCard';
-import MetricCard from '@/components/dashboard/MetricCard';
 import ReinspectionCard from '@/components/dashboard/ReinspectionCard';
 import NotificationBell from '@/components/common/NotificationBell';
 import ProfileAvatar from '@/components/common/ProfileAvatar';
-import SanitationIllustration from '@/components/illustrations/SanitationIllustration';
 
 import TourOverlay, {
   TourTarget,
@@ -51,6 +50,7 @@ import {
   getReinspections,
   ReinspectionRecord,
 } from '@/storage/reinspectionStorage';
+import { isReinspectionOverdue } from '@/utils/reinspection';
 
 export default function DashboardScreen() {
   const { profile } = useAuth();
@@ -85,9 +85,6 @@ export default function DashboardScreen() {
   const metricsRef =
     useRef<View>(null);
 
-  const inspectionRef =
-    useRef<View>(null);
-
   const reinspectionsRef =
     useRef<View>(null);
 
@@ -95,7 +92,6 @@ export default function DashboardScreen() {
     useRef<ScrollView>(null);
 
   const metricsY = useRef(0);
-  const inspectionY = useRef(0);
   const reinspectionsY = useRef(0);
 
   useFocusEffect(
@@ -138,6 +134,12 @@ export default function DashboardScreen() {
   const pendingReinspections = reinspections.filter(
     (reinspection) => reinspection.status === 'pending'
   );
+  const overdueReinspections = pendingReinspections.filter((reinspection) =>
+    isReinspectionOverdue(reinspection.scheduledDate, reinspection.status)
+  ).length;
+  const pendingSync = inspections.filter((inspection) => inspection.syncStatus === 'pending').length;
+  const failedSync = inspections.filter((inspection) => inspection.syncStatus === 'failed').length;
+  const syncAttention = pendingSync + failedSync;
 
   const tourSteps = [
     {
@@ -146,13 +148,6 @@ export default function DashboardScreen() {
         'These cards show your inspections today and places that require reinspection.',
       ref: metricsRef,
       y: metricsY,
-    },
-    {
-      title: 'Start an Inspection',
-      description:
-        'Use this section when you are ready to conduct a new sanitary inspection.',
-      ref: inspectionRef,
-      y: inspectionY,
     },
     {
       title: 'Upcoming Reinspections',
@@ -310,22 +305,30 @@ export default function DashboardScreen() {
         </View>
 
         <EntranceTransition style={styles.hero}>
-          <View style={styles.heroGlow} />
           <View style={styles.heroCopy}>
             <View style={styles.assignmentPill}>
-              <Ionicons name="location-outline" size={14} color={COLORS.white} />
+              <Ionicons name="location-outline" size={14} color={COLORS.primary} />
               <Text numberOfLines={1} style={styles.assignmentText}>{profile?.assignedBarangay ?? 'Assigned barangay'}</Text>
             </View>
-            <Text style={styles.heroTitle}>Keep your community inspection-ready.</Text>
-            <Text style={styles.heroBody}>Capture field findings, follow up cases, and keep records moving—even offline.</Text>
+            <Text style={styles.heroTitle}>Ready for today&apos;s fieldwork?</Text>
+            <Text style={styles.heroBody}>Inspect, document, and move follow-ups forward.</Text>
           </View>
-          <SanitationIllustration variant="community" size="small" style={styles.heroArt} />
+          <Pressable accessibilityRole="button" onPress={() => router.push('/(tabs)/establishments')} style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}>
+            <View style={styles.primaryActionIcon}><Ionicons name="clipboard-outline" size={20} color={COLORS.primary} /></View>
+            <Text style={styles.primaryActionText}>Start Inspection</Text>
+            <Ionicons name="arrow-forward" size={18} color={COLORS.white} />
+          </Pressable>
+          <Pressable accessibilityRole="button" onPress={() => router.push('/field-planning' as Href)} style={({ pressed }) => [styles.fieldPlanAction, pressed && styles.pressed]}>
+            <Ionicons name="navigate-circle-outline" size={21} color={COLORS.primary} />
+            <View style={styles.fieldPlanCopy}><Text style={styles.fieldPlanTitle}>Open Field Plan</Text><Text style={styles.fieldPlanText}>Coverage, queue, and map</Text></View>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.primary} />
+          </Pressable>
         </EntranceTransition>
 
         <View
           ref={metricsRef}
           collapsable={false}
-          style={styles.metrics}
+          style={styles.section}
           onLayout={(event) => {
             metricsY.current =
               event.nativeEvent.layout.y;
@@ -333,34 +336,34 @@ export default function DashboardScreen() {
             setIsMetricsReady(true);
           }}
         >
-          <MetricCard
-            value={inspectionsToday}
-            label="Inspections Today"
-            icon="clipboard-outline"
-          />
-
-          <MetricCard
-            value={pendingReinspections.length}
-            label="For Reinspection"
-            icon="refresh-outline"
-            tone="warning"
-          />
-        </View>
-
-        <View
-          ref={inspectionRef}
-          collapsable={false}
-          style={styles.section}
-          onLayout={(event) => {
-            inspectionY.current =
-              event.nativeEvent.layout.y;
-          }}
-        >
-          <SectionHeader title="Quick actions" subtitle="Continue your field work" />
-          <View style={styles.actions}>
-            <QuickActionCard icon="add-circle-outline" title="Start an inspection" description="Choose a registered place" onPress={() => router.push('/(tabs)/establishments')} />
-            <QuickActionCard icon="cloud-upload-outline" title="Check synchronization" description="Review pending or failed records" tone="blue" onPress={() => router.push('/(tabs)/sync')} />
-          </View>
+          <SectionHeader title="Operational priorities" subtitle="Today&apos;s activity and items needing attention" />
+          <EntranceTransition delay={45} style={styles.priorityPanel}>
+            <View style={styles.todayPriority}>
+              <View style={styles.activityCopy}>
+                <Text style={styles.priorityEyebrow}>INSPECTION ACTIVITY</Text>
+                <Text style={styles.todayLabel}>Recorded today</Text>
+              </View>
+              <Text style={styles.todayValue}>{inspectionsToday}</Text>
+            </View>
+            <View style={styles.needsAttentionHeader}>
+              <Text style={styles.needsAttentionTitle}>Needs attention</Text>
+              <Text style={styles.needsAttentionHint}>Open an item to take action</Text>
+            </View>
+            <View style={styles.priorityRows}>
+              <Pressable onPress={() => router.push('/(tabs)/sync')} style={({ pressed }) => [styles.priorityRow, pressed && styles.pressed]}>
+                <View style={[styles.priorityMarker, failedSync > 0 ? styles.priorityMarkerDanger : styles.priorityMarkerBlue]} />
+                <View style={styles.priorityCopy}><Text style={styles.priorityTitle}>Sync</Text><Text style={styles.priorityMeta}>{failedSync > 0 ? `${failedSync} failed · ${pendingSync} pending` : `${pendingSync} pending · none failed`}</Text></View>
+                <Text style={[styles.priorityValue, failedSync > 0 && styles.priorityValueDanger]}>{syncAttention}</Text>
+                <Ionicons name="chevron-forward" size={17} color={COLORS.textMuted} />
+              </Pressable>
+              <Pressable onPress={() => pendingReinspections[0] ? router.push(`/reinspection/${pendingReinspections[0].id}`) : undefined} disabled={!pendingReinspections.length} style={({ pressed }) => [styles.priorityRow, pressed && styles.pressed]}>
+                <View style={[styles.priorityMarker, styles.priorityMarkerWarning]} />
+                <View style={styles.priorityCopy}><Text style={styles.priorityTitle}>Follow-ups</Text><Text style={styles.priorityMeta}>{overdueReinspections > 0 ? `${overdueReinspections} overdue` : 'No overdue follow-ups'}</Text></View>
+                <Text style={styles.priorityValue}>{pendingReinspections.length}</Text>
+                {pendingReinspections.length ? <Ionicons name="chevron-forward" size={17} color={COLORS.textMuted} /> : null}
+              </Pressable>
+            </View>
+          </EntranceTransition>
         </View>
 
         <View
@@ -442,36 +445,57 @@ const styles = StyleSheet.create({
   },
 
   container: {
+    width: '100%',
+    maxWidth: 700,
+    alignSelf: 'center',
     padding: SPACING.lg,
     paddingBottom: SPACING.section,
     gap: SPACING.xl,
   },
 
   greeting: {
+    ...TYPOGRAPHY.title,
     fontSize: 22,
     lineHeight: 27,
-    fontWeight: '800',
     color: COLORS.text,
   },
   eyebrow: { ...TYPOGRAPHY.tiny, color: COLORS.primary, fontWeight: '800', letterSpacing: 0.8 },
-  hero: { minHeight: 232, position: 'relative', overflow: 'hidden', flexDirection: 'row', alignItems: 'center', padding: SPACING.xl, backgroundColor: COLORS.primaryDeep, borderRadius: RADIUS.xxl, ...SHADOWS.card },
-  heroGlow: { position: 'absolute', width: 190, height: 190, right: -48, top: -48, borderRadius: 95, backgroundColor: 'rgba(71,184,174,0.20)' },
-  heroCopy: { flex: 1, minWidth: 0, zIndex: 2, paddingRight: 112 },
-  assignmentPill: { maxWidth: 190, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, paddingHorizontal: SPACING.sm, paddingVertical: 6, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: RADIUS.pill },
-  assignmentText: { ...TYPOGRAPHY.tiny, color: COLORS.white, fontWeight: '700' },
-  heroTitle: { fontSize: 25, lineHeight: 30, letterSpacing: -0.4, fontWeight: '800', color: COLORS.white, marginTop: SPACING.md },
-  heroBody: { ...TYPOGRAPHY.caption, color: '#D8EBE8', marginTop: SPACING.sm, maxWidth: 230 },
-  heroArt: { position: 'absolute', right: 0, bottom: 12 },
-
-  metrics: {
-    flexDirection: 'row',
-    gap: SPACING.md,
-  },
+  hero: { padding: SPACING.xl, backgroundColor: COLORS.primarySoft, borderRadius: RADIUS.xxl, borderWidth: 1, borderColor: COLORS.primaryLight, ...SHADOWS.subtle },
+  heroCopy: { width: '100%', zIndex: 2 },
+  assignmentPill: { maxWidth: 220, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, paddingHorizontal: SPACING.sm, paddingVertical: 6, backgroundColor: 'rgba(255,255,255,0.76)', borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.primaryLight },
+  assignmentText: { ...TYPOGRAPHY.tiny, color: COLORS.primaryDeep, fontWeight: '700', flexShrink: 1 },
+  heroTitle: { ...TYPOGRAPHY.title, fontSize: 25, lineHeight: 30, color: COLORS.text, marginTop: SPACING.md, maxWidth: 390 },
+  heroBody: { ...TYPOGRAPHY.bodySmall, color: COLORS.textSecondary, marginTop: SPACING.sm, maxWidth: 390 },
+  primaryAction: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.lg, paddingHorizontal: SPACING.md, borderRadius: RADIUS.lg, backgroundColor: COLORS.primary, zIndex: 2 },
+  primaryActionIcon: { width: 34, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.white },
+  primaryActionText: { ...TYPOGRAPHY.bodyMedium, color: COLORS.white, flex: 1 },
+  fieldPlanAction: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.sm, paddingHorizontal: SPACING.md, borderRadius: RADIUS.lg, backgroundColor: 'rgba(255,255,255,0.78)', borderWidth: 1, borderColor: COLORS.primaryLight },
+  fieldPlanCopy: { flex: 1 }, fieldPlanTitle: { ...TYPOGRAPHY.bodyMedium, color: COLORS.primaryDeep }, fieldPlanText: { ...TYPOGRAPHY.tiny, color: COLORS.textSecondary },
 
   section: {
     gap: SPACING.lg,
   },
-  actions: { gap: SPACING.sm },
+  priorityPanel: { overflow: 'hidden', backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.subtle },
+  todayPriority: { minHeight: 104, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACING.lg, paddingHorizontal: SPACING.xl, paddingVertical: SPACING.lg, backgroundColor: COLORS.primarySoft },
+  activityCopy: { flex: 1 },
+  priorityEyebrow: { ...TYPOGRAPHY.tiny, color: COLORS.primary, fontWeight: '800', letterSpacing: 0.8 },
+  todayValue: { ...TYPOGRAPHY.metric, fontSize: 42, lineHeight: 46, color: COLORS.primaryDeep },
+  todayLabel: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, marginTop: SPACING.xs },
+  needsAttentionHeader: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md, paddingBottom: SPACING.xs },
+  needsAttentionTitle: { ...TYPOGRAPHY.label, color: COLORS.text },
+  needsAttentionHint: { ...TYPOGRAPHY.tiny, color: COLORS.textMuted, marginTop: 1 },
+  priorityRows: { paddingHorizontal: SPACING.lg, paddingBottom: SPACING.sm },
+  priorityRow: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, borderBottomWidth: 1, borderBottomColor: COLORS.divider },
+  priorityMarker: { width: 8, height: 32, borderRadius: RADIUS.pill },
+  priorityMarkerBlue: { backgroundColor: COLORS.blue },
+  priorityMarkerDanger: { backgroundColor: COLORS.violation },
+  priorityMarkerWarning: { backgroundColor: COLORS.warning },
+  priorityCopy: { flex: 1, minWidth: 0 },
+  priorityTitle: { ...TYPOGRAPHY.bodyMedium, color: COLORS.text },
+  priorityMeta: { ...TYPOGRAPHY.tiny, color: COLORS.textSecondary, marginTop: 2 },
+  priorityValue: { ...TYPOGRAPHY.title, minWidth: 28, textAlign: 'right', fontSize: 22, lineHeight: 27, color: COLORS.text },
+  priorityValueDanger: { color: COLORS.violation },
+  pressed: { opacity: 0.74, transform: [{ scale: 0.99 }] },
 
   sectionDescription: {
     fontSize: 14,

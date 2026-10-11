@@ -182,6 +182,7 @@ export async function uploadSupabaseInspectionEvidence(
       id: finding.id,
       category: finding.category,
       details: finding.details,
+      ...(finding.correctiveAction ? { correctiveAction: finding.correctiveAction } : {}),
       evidence: await Promise.all(
         finding.evidence.map((evidence) =>
           uploadSupabaseEvidenceAttachment(

@@ -15,6 +15,7 @@ import {
   COLORS,
   RADIUS,
   SPACING,
+  TYPOGRAPHY,
 } from '@/constants/theme';
 
 type ChoiceProps = {
@@ -22,6 +23,7 @@ type ChoiceProps = {
   title: string;
   description?: string;
   code?: string;
+  tone?: 'default' | 'success' | 'danger' | 'warning';
   onPress: () => void;
 };
 
@@ -30,14 +32,20 @@ export function InspectionChoice({
   title,
   description,
   code,
+  tone = 'default',
   onPress,
 }: ChoiceProps) {
   return (
     <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
       onPress={onPress}
       style={({ pressed }) => [
         styles.choice,
         selected && styles.choiceSelected,
+        selected && tone === 'success' && styles.choiceSuccess,
+        selected && tone === 'danger' && styles.choiceDanger,
+        selected && tone === 'warning' && styles.choiceWarning,
         pressed && styles.pressed,
       ]}
     >
@@ -109,6 +117,9 @@ export function YesNoField({
     <View>
       <View style={styles.row}>
         <Pressable
+          accessibilityRole="radio"
+          accessibilityLabel="Yes"
+          accessibilityState={{ selected: value === true }}
           onPress={() => onChange(true)}
           style={({ pressed }) => [
             styles.yesNo,
@@ -138,6 +149,9 @@ export function YesNoField({
         </Pressable>
 
         <Pressable
+          accessibilityRole="radio"
+          accessibilityLabel="No"
+          accessibilityState={{ selected: value === false }}
           onPress={() => onChange(false)}
           style={({ pressed }) => [
             styles.yesNo,
@@ -180,6 +194,8 @@ type BinaryProps = {
   noLabel: string;
   onChange: (value: 1 | 0) => void;
   error?: string;
+  yesTone?: ChoiceProps['tone'];
+  noTone?: ChoiceProps['tone'];
 };
 
 export function BinaryField({
@@ -188,6 +204,8 @@ export function BinaryField({
   noLabel,
   onChange,
   error,
+  yesTone,
+  noTone,
 }: BinaryProps) {
   return (
     <View style={styles.stack}>
@@ -195,6 +213,7 @@ export function BinaryField({
         selected={value === 1}
         code="1"
         title={yesLabel}
+        tone={yesTone}
         onPress={() => onChange(1)}
       />
 
@@ -202,6 +221,7 @@ export function BinaryField({
         selected={value === 0}
         code="0"
         title={noLabel}
+        tone={noTone}
         onPress={() => onChange(0)}
       />
 
@@ -345,11 +365,12 @@ const styles = StyleSheet.create({
   },
 
   choice: {
-    minHeight: 58,
+    minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.sm,
-    padding: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 10,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: RADIUS.md,
@@ -360,20 +381,22 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
     backgroundColor: COLORS.primarySoft,
   },
+  choiceSuccess: { borderColor: COLORS.compliant, backgroundColor: COLORS.compliantSoft },
+  choiceDanger: { borderColor: COLORS.violation, backgroundColor: COLORS.violationSoft },
+  choiceWarning: { borderColor: COLORS.warning, backgroundColor: COLORS.warningSoft },
 
   choiceContent: {
     flex: 1,
   },
 
   choiceTitle: {
-    fontSize: 13,
-    fontWeight: '700',
+    ...TYPOGRAPHY.label,
     color: COLORS.text,
   },
 
   choiceDescription: {
+    ...TYPOGRAPHY.tiny,
     marginTop: 3,
-    fontSize: 11,
     lineHeight: 16,
     color: COLORS.textSecondary,
   },
@@ -407,14 +430,12 @@ const styles = StyleSheet.create({
   },
 
   yesNoText: {
-    fontSize: 13,
-    fontWeight: '700',
+    ...TYPOGRAPHY.label,
     color: COLORS.text,
   },
 
   label: {
-    fontSize: 13,
-    fontWeight: '700',
+    ...TYPOGRAPHY.label,
     color: COLORS.text,
   },
 
@@ -457,8 +478,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
   },
 
-  dateValue: { flex: 1, fontSize: 14, fontWeight: '700', color: COLORS.text },
-  datePlaceholder: { flex: 1, fontSize: 14, color: COLORS.textMuted },
+  dateValue: { ...TYPOGRAPHY.bodyMedium, flex: 1, fontSize: 14, color: COLORS.text },
+  datePlaceholder: { ...TYPOGRAPHY.bodySmall, flex: 1, fontSize: 14, color: COLORS.textMuted },
 
   validDate: {
     flexDirection: 'row',

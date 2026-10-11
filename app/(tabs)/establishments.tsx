@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import {
+  type Href,
   router,
   useFocusEffect,
 } from 'expo-router';
@@ -30,6 +31,7 @@ import {
   COLORS,
   RADIUS,
   SPACING,
+  TYPOGRAPHY,
 } from '@/constants/theme';
 import {
   Place,
@@ -268,13 +270,13 @@ export default function EstablishmentsScreen() {
         ListHeaderComponent={
           <View>
             <View style={styles.header}>
-              <View>
+              <View style={styles.headerCopy}>
                 <Text style={styles.title}>
                   Places
                 </Text>
 
-                <Text style={styles.subtitle}>
-                  {profile?.assignedBarangay ?? 'Assigned barangay'}
+                <Text numberOfLines={2} style={styles.subtitle}>
+                  Assigned barangay · {profile?.assignedBarangay ?? 'Not assigned'}
                 </Text>
               </View>
 
@@ -294,6 +296,11 @@ export default function EstablishmentsScreen() {
                 />
                 <Text style={styles.addButtonText}>Add Place</Text>
               </Pressable>
+            </View>
+
+            <View style={styles.directoryTools}>
+              <Pressable onPress={() => router.push('/field-planning' as Href)} style={({ pressed }) => [styles.directoryTool, pressed && styles.pressed]}><Ionicons name="navigate-circle-outline" size={20} color={COLORS.primary} /><View style={styles.toolCopy}><Text style={styles.toolTitle}>Field Plan</Text><Text style={styles.toolText}>Coverage and priority queue</Text></View></Pressable>
+              <Pressable onPress={() => router.push('/place/import')} style={({ pressed }) => [styles.directoryTool, styles.importTool, pressed && styles.pressed]}><Ionicons name="cloud-upload-outline" size={20} color={COLORS.warningDark} /><View style={styles.toolCopy}><Text style={styles.toolTitle}>Bulk Import</Text><Text style={styles.toolText}>Add a census CSV</Text></View></Pressable>
             </View>
 
             <View
@@ -360,6 +367,8 @@ export default function EstablishmentsScreen() {
                   return (
                     <Pressable
                       key={type}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
                       onPress={() =>
                         setSelectedType(type)
                       }
@@ -440,6 +449,9 @@ export default function EstablishmentsScreen() {
     },
 
     listContent: {
+      width: '100%',
+      maxWidth: 700,
+      alignSelf: 'center',
       padding: SPACING.lg,
       paddingBottom: 40,
     },
@@ -451,6 +463,8 @@ export default function EstablishmentsScreen() {
       gap: SPACING.md,
       marginBottom: SPACING.lg,
     },
+
+    headerCopy: { flex: 1, minWidth: 0 },
 
     addButton: {
       minHeight: 44,
@@ -464,21 +478,23 @@ export default function EstablishmentsScreen() {
     },
 
     addButtonText: {
-      fontSize: 13,
-      fontWeight: '700',
+      ...TYPOGRAPHY.label,
       color: COLORS.white,
     },
+    directoryTools: { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.md },
+    directoryTool: { flex: 1, minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, padding: SPACING.md, borderRadius: RADIUS.lg, backgroundColor: COLORS.primarySoft, borderWidth: 1, borderColor: COLORS.primaryLight },
+    importTool: { backgroundColor: COLORS.warningSoft, borderColor: '#EBD8A7' },
+    toolCopy: { flex: 1 }, toolTitle: { ...TYPOGRAPHY.label, color: COLORS.text }, toolText: { ...TYPOGRAPHY.tiny, color: COLORS.textSecondary, marginTop: 1 },
 
     title: {
+      ...TYPOGRAPHY.display,
       fontSize: 28,
-      fontWeight: '700',
       color: COLORS.text,
     },
 
     subtitle: {
+      ...TYPOGRAPHY.bodySmall,
       marginTop: 5,
-      fontSize: 14,
-      lineHeight: 20,
       color: COLORS.textSecondary,
     },
 
@@ -497,7 +513,7 @@ export default function EstablishmentsScreen() {
 
     searchInput: {
       flex: 1,
-      fontSize: 14,
+      ...TYPOGRAPHY.bodySmall,
       color: COLORS.text,
       paddingVertical: 12,
     },
@@ -507,9 +523,8 @@ export default function EstablishmentsScreen() {
     },
 
     filterLabel: {
+      ...TYPOGRAPHY.bodyMedium,
       marginBottom: SPACING.sm,
-      fontSize: 14,
-      fontWeight: '700',
       color: COLORS.text,
     },
 
@@ -519,12 +534,14 @@ export default function EstablishmentsScreen() {
     },
 
     filterChip: {
+      minHeight: 36,
+      justifyContent: 'center',
       borderWidth: 1,
       borderColor: COLORS.border,
       borderRadius: 20,
       backgroundColor: COLORS.surface,
       paddingHorizontal: 14,
-      paddingVertical: 9,
+      paddingVertical: 7,
     },
 
     filterChipSelected: {
@@ -533,8 +550,7 @@ export default function EstablishmentsScreen() {
     },
 
     filterChipText: {
-      fontSize: 13,
-      fontWeight: '600',
+      ...TYPOGRAPHY.caption,
       color: COLORS.textSecondary,
     },
 
@@ -550,19 +566,18 @@ export default function EstablishmentsScreen() {
     },
 
     resultsTitle: {
+      ...TYPOGRAPHY.subheading,
       fontSize: 17,
-      fontWeight: '700',
       color: COLORS.text,
     },
 
     resultsCount: {
-      fontSize: 12,
-      fontWeight: '600',
+      ...TYPOGRAPHY.caption,
       color: COLORS.textSecondary,
     },
 
     cardWrapper: {
-      marginBottom: SPACING.md,
+      marginBottom: SPACING.sm,
     },
 
     emptyContainer: {
@@ -583,14 +598,14 @@ export default function EstablishmentsScreen() {
     },
 
     emptyTitle: {
+      ...TYPOGRAPHY.subheading,
       fontSize: 17,
-      fontWeight: '700',
       color: COLORS.text,
     },
 
     emptyText: {
+      ...TYPOGRAPHY.caption,
       marginTop: 5,
-      fontSize: 13,
       lineHeight: 19,
       color: COLORS.textSecondary,
       textAlign: 'center',

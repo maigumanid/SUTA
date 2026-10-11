@@ -3,7 +3,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
   Alert,
-  Image,
   Linking,
   Pressable,
   ScrollView,
@@ -13,7 +12,8 @@ import {
 } from 'react-native';
 
 import AppButton from '@/components/common/AppButton';
-import { COLORS, RADIUS, SPACING } from '@/constants/theme';
+import EvidencePreviewGallery from '@/components/inspection/EvidencePreviewGallery';
+import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useInspection } from '@/context/InspectionContext';
 import {
   deleteEvidencePhoto,
@@ -231,7 +231,7 @@ export default function EvidenceScreen() {
             style={styles.findingCard}
           >
             <Text style={styles.findingNumber}>
-              Finding {index + 1}
+              Finding {index + 1} · {finding.evidence.length} {finding.evidence.length === 1 ? 'photo' : 'photos'}
             </Text>
             <Text style={styles.category}>
               {getCategoryLabel(finding.category)}
@@ -240,42 +240,10 @@ export default function EvidenceScreen() {
               {finding.details}
             </Text>
 
-            {finding.evidence.length > 0 && (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.photoList}
-              >
-                {finding.evidence.map((evidence) => (
-                  <View
-                    key={evidence.id}
-                    style={styles.photoWrapper}
-                  >
-                    <Image
-                      source={{ uri: evidence.uri }}
-                      style={styles.photo}
-                    />
-                    <Pressable
-                      accessibilityLabel="Remove evidence photo"
-                      onPress={() =>
-                        removeEvidence(
-                          finding.id,
-                          evidence.id,
-                          evidence.uri
-                        )
-                      }
-                      style={styles.removeButton}
-                    >
-                      <Ionicons
-                        name="close"
-                        size={18}
-                        color={COLORS.white}
-                      />
-                    </Pressable>
-                  </View>
-                ))}
-              </ScrollView>
-            )}
+            <EvidencePreviewGallery
+              evidence={finding.evidence}
+              onRemove={(evidence) => removeEvidence(finding.id, evidence.id, evidence.uri)}
+            />
 
             <View style={styles.actions}>
               <EvidenceButton
@@ -333,6 +301,7 @@ function EvidenceButton({
 }) {
   return (
     <Pressable
+      accessibilityRole="button"
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
@@ -394,16 +363,19 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primarySoft,
   },
   headerTitle: {
+    ...TYPOGRAPHY.heading,
     fontSize: 19,
-    fontWeight: '700',
     color: COLORS.text,
   },
   headerSubtitle: {
+    ...TYPOGRAPHY.caption,
     marginTop: 2,
-    fontSize: 12,
     color: COLORS.textSecondary,
   },
   content: {
+    width: '100%',
+    maxWidth: 700,
+    alignSelf: 'center',
     gap: SPACING.lg,
     padding: SPACING.lg,
     paddingBottom: 50,
@@ -430,8 +402,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
   },
   findingNumber: {
+    ...TYPOGRAPHY.bodyMedium,
     fontSize: 14,
-    fontWeight: '800',
     color: COLORS.text,
   },
   category: {
@@ -441,34 +413,10 @@ const styles = StyleSheet.create({
     color: COLORS.violation,
   },
   details: {
+    ...TYPOGRAPHY.caption,
     marginTop: SPACING.sm,
-    fontSize: 13,
     lineHeight: 19,
     color: COLORS.text,
-  },
-  photoList: {
-    gap: SPACING.sm,
-    paddingTop: SPACING.md,
-  },
-  photoWrapper: {
-    position: 'relative',
-  },
-  photo: {
-    width: 112,
-    height: 112,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.surfaceMuted,
-  },
-  removeButton: {
-    position: 'absolute',
-    top: 5,
-    right: 5,
-    width: 28,
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 14,
-    backgroundColor: COLORS.overlay,
   },
   actions: {
     flexDirection: 'row',
@@ -488,8 +436,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
   },
   evidenceButtonText: {
+    ...TYPOGRAPHY.label,
     fontSize: 12,
-    fontWeight: '700',
     color: COLORS.primary,
   },
   savingText: {

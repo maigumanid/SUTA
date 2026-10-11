@@ -1,43 +1,61 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  BackHandler,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import AppButton from '@/components/common/AppButton';
 import EntranceTransition from '@/components/common/EntranceTransition';
 import ScreenContainer from '@/components/common/ScreenContainer';
-import SanitationIllustration from '@/components/illustrations/SanitationIllustration';
-import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
+import { SUTA_ASSETS } from '@/constants/sutaAssets';
+import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { setOnboardingState } from '@/storage/secureStorage';
 
-type GuideStep = { icon: keyof typeof Ionicons.glyphMap; title: string; body: string };
+type GuideStep = {
+  image: number;
+  title: string;
+  bsiBody: string;
+  adminBody: string;
+};
 
-const BSI_STEPS: GuideStep[] = [
-  { icon: 'home-outline', title: 'Start with today’s fieldwork', body: 'Home brings your assigned barangay, workload, priority places, and follow-ups into one view.' },
-  { icon: 'location-outline', title: 'Choose the right place', body: 'Find or register a household, confirm its details, then begin the visit from that place record.' },
-  { icon: 'navigate-outline', title: 'Capture the field location', body: 'Record where the visit happens without changing the household’s registered address.' },
-  { icon: 'checkbox-outline', title: 'Inspect with confidence', body: 'Complete the water and sanitation checklist, select testing dates, and keep your draft as you move.' },
-  { icon: 'camera-outline', title: 'Document what matters', body: 'Record clear findings and attach private evidence to the finding it supports.' },
-  { icon: 'cloud-upload-outline', title: 'Save now, sync safely', body: 'Review and save even offline. Sync shows Pending, Failed, and Synced records without losing local history.' },
-  { icon: 'document-text-outline', title: 'Follow up and submit', body: 'Track reinspections, add device-calendar reminders, and export complete operational reports when connected.' },
-];
-
-const ADMIN_STEPS: GuideStep[] = [
-  { icon: 'speedometer-outline', title: 'See the municipality clearly', body: 'Dashboard metrics surface inspection activity, sanitation risk, and follow-up workload.' },
-  { icon: 'people-outline', title: 'Keep assignments official', body: 'Create and manage BSI accounts, then assign each inspector from the canonical barangay directory.' },
-  { icon: 'clipboard-outline', title: 'Review the record', body: 'Inspect authorized historical records and full printable forms without altering submitted data.' },
-  { icon: 'warning-outline', title: 'Act on priorities', body: 'Monitor high-risk places and pending or overdue reinspections from operational views.' },
-  { icon: 'document-text-outline', title: 'Prepare real submissions', body: 'Export municipal summaries, barangay reports, inspection registers, and follow-up reports from complete filtered data.' },
+const STEPS: GuideStep[] = [
+  {
+    image: SUTA_ASSETS.onboardingPlaces,
+    title: 'Organize places and fieldwork',
+    bsiBody: 'Find or register households in your assigned barangay, then keep every field visit connected to the right place.',
+    adminBody: 'Review registered places and keep barangay fieldwork organized across assigned inspectors.',
+  },
+  {
+    image: SUTA_ASSETS.onboardingInspection,
+    title: 'Capture complete inspections',
+    bsiBody: 'Record water and sanitation checks, testing dates, findings, remarks, and private evidence—even while working offline.',
+    adminBody: 'Review complete water and sanitation records, findings, follow-up details, and authorized evidence.',
+  },
+  {
+    image: SUTA_ASSETS.onboardingSyncReports,
+    title: 'Sync, follow up, and report',
+    bsiBody: 'Safely synchronize field records, monitor reinspections, and prepare complete operational reports when connected.',
+    adminBody: 'Monitor synchronized activity, follow-up workload, and municipality-ready reports from authorized records.',
+  },
 ];
 
 export default function OnboardingScreen() {
   const { user, profile } = useAuth();
   const { replay } = useLocalSearchParams<{ replay?: string }>();
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
   const [index, setIndex] = useState(0);
-  const steps = useMemo(() => profile?.role === 'admin' ? ADMIN_STEPS : BSI_STEPS, [profile?.role]);
+  const steps = useMemo(() => STEPS, []);
   const home = profile?.role === 'admin' ? '/(admin)/admin-dashboard' : '/(tabs)/dashboard';
 
   const leave = useCallback(async (state: 'completed' | 'skipped') => {
@@ -66,26 +84,57 @@ export default function OnboardingScreen() {
   if (!user || !profile) return null;
   const step = steps[index];
   const last = index === steps.length - 1;
+  const compact = height < 700;
 
   return (
     <ScreenContainer>
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, SPACING.xl) }]} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Text style={styles.badge}>{profile.role === 'admin' ? 'ADMIN GUIDE' : 'BSI GUIDE'}</Text>
-          <Pressable onPress={requestSkip} accessibilityRole="button"><Text style={styles.skip}>Skip</Text></Pressable>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, SPACING.xl) }]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View pointerEvents="none" style={styles.backgroundArt}>
+          <View style={styles.orbTop} />
+          <View style={styles.orbBottom} />
         </View>
-        <View style={styles.progressTrack}><View style={[styles.progress, { width: `${((index + 1) / steps.length) * 100}%` }]} /></View>
-        <Text style={styles.count}>Step {index + 1} of {steps.length}</Text>
-        <EntranceTransition key={index} distance={14} style={styles.card}>
-          <SanitationIllustration size="medium" variant={profile.role === 'admin' ? 'reports' : index % 2 === 0 ? 'inspection' : 'community'} style={styles.illustration} />
-          <View style={styles.icon}><Ionicons name={step.icon} size={22} color={COLORS.primary} /></View>
+
+        <View style={styles.header}>
+          <Image accessibilityLabel="SUTA" source={SUTA_ASSETS.wordmark} contentFit="contain" style={styles.wordmark} />
+          <Pressable onPress={requestSkip} accessibilityRole="button" hitSlop={8}>
+            <Text style={styles.skip}>Skip</Text>
+          </Pressable>
+        </View>
+
+        <EntranceTransition key={index} distance={14} style={styles.slide}>
+          <View style={[styles.illustrationStage, compact && styles.illustrationStageCompact]}>
+            <View style={styles.illustrationHalo} />
+            <Image
+              accessibilityLabel={step.title}
+              source={step.image}
+              contentFit="contain"
+              transition={140}
+              style={styles.illustration}
+            />
+          </View>
+          <Text style={styles.roleLabel}>{profile.role === 'admin' ? 'MUNICIPAL OPERATIONS' : 'FIELD OPERATIONS'}</Text>
           <Text style={styles.title}>{step.title}</Text>
-          <Text style={styles.body}>{step.body}</Text>
+          <Text style={styles.body}>{profile.role === 'admin' ? step.adminBody : step.bsiBody}</Text>
         </EntranceTransition>
-        <Text style={styles.note}>Your inspection drafts and cached history remain available for supported offline work.</Text>
+
+        <View accessibilityLabel={`Page ${index + 1} of ${steps.length}`} style={styles.indicators}>
+          {steps.map((item, itemIndex) => (
+            <View key={item.title} style={[styles.indicator, itemIndex === index && styles.indicatorActive]} />
+          ))}
+        </View>
+
         <View style={styles.actions}>
-          {index > 0 && <AppButton title="Previous" variant="secondary" onPress={() => setIndex((value) => value - 1)} />}
-          <AppButton title={last ? 'Finish' : 'Next'} onPress={() => last ? void leave('completed') : setIndex((value) => value + 1)} />
+          {index > 0 ? (
+            <AppButton title="Previous" variant="secondary" style={styles.action} onPress={() => setIndex((value) => value - 1)} />
+          ) : <View style={styles.action} />}
+          <AppButton
+            title={last ? 'Get Started' : 'Next'}
+            style={styles.action}
+            onPress={() => last ? void leave('completed') : setIndex((value) => value + 1)}
+          />
         </View>
       </ScrollView>
     </ScreenContainer>
@@ -93,14 +142,31 @@ export default function OnboardingScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { flexGrow: 1, paddingVertical: SPACING.xl },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  badge: { ...TYPOGRAPHY.label, color: COLORS.primary }, skip: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, padding: SPACING.sm },
-  progressTrack: { height: 6, marginTop: SPACING.xl, borderRadius: 3, backgroundColor: COLORS.divider, overflow: 'hidden' },
-  progress: { height: '100%', backgroundColor: COLORS.primary }, count: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, marginTop: SPACING.sm },
-  card: { flex: 1, minHeight: 430, alignItems: 'center', justifyContent: 'center', marginVertical: SPACING.xl, padding: SPACING.xxl, backgroundColor: COLORS.surface, borderRadius: RADIUS.xxl, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.card },
-  illustration: { marginBottom: SPACING.md },
-  icon: { width: 46, height: 46, borderRadius: RADIUS.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.primaryLight, marginBottom: SPACING.lg },
-  title: { ...TYPOGRAPHY.heading, color: COLORS.text, textAlign: 'center' }, body: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, textAlign: 'center', marginTop: SPACING.md },
-  note: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, textAlign: 'center' }, actions: { gap: SPACING.md, marginTop: SPACING.xl },
+  content: {
+    flexGrow: 1,
+    width: '100%',
+    maxWidth: 620,
+    alignSelf: 'center',
+    paddingTop: SPACING.lg,
+    position: 'relative',
+  },
+  backgroundArt: { ...StyleSheet.absoluteFillObject, left: -SPACING.xl, right: -SPACING.xl, overflow: 'hidden' },
+  orbTop: { position: 'absolute', width: 240, height: 240, borderRadius: 120, top: -138, right: -96, backgroundColor: COLORS.aquaSoft },
+  orbBottom: { position: 'absolute', width: 210, height: 210, borderRadius: 105, bottom: 34, left: -128, backgroundColor: COLORS.primaryMist },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 50 },
+  wordmark: { width: 108, height: 42 },
+  skip: { ...TYPOGRAPHY.bodyMedium, color: COLORS.primary, padding: SPACING.sm },
+  slide: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: SPACING.md },
+  illustrationStage: { width: '100%', height: 350, alignItems: 'center', justifyContent: 'center', marginTop: SPACING.sm },
+  illustrationStageCompact: { height: 250 },
+  illustrationHalo: { position: 'absolute', width: '82%', height: '72%', borderRadius: RADIUS.pill, backgroundColor: 'rgba(221,245,241,0.72)' },
+  illustration: { width: '100%', height: '100%' },
+  roleLabel: { ...TYPOGRAPHY.tiny, color: COLORS.primary, fontWeight: '800', letterSpacing: 1.1, marginTop: SPACING.md },
+  title: { ...TYPOGRAPHY.display, color: COLORS.text, textAlign: 'center', marginTop: SPACING.sm, maxWidth: 460 },
+  body: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, textAlign: 'center', marginTop: SPACING.md, maxWidth: 500 },
+  indicators: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, marginTop: SPACING.xl },
+  indicator: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.borderStrong },
+  indicatorActive: { width: 28, backgroundColor: COLORS.primary },
+  actions: { flexDirection: 'row', gap: SPACING.md, marginTop: SPACING.xl },
+  action: { flex: 1 },
 });

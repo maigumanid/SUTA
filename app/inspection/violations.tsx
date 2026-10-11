@@ -19,8 +19,15 @@ import {
 import AppButton from '@/components/common/AppButton';
 import KeyboardSafeView from '@/components/common/KeyboardSafeView';
 import EvidencePreviewGallery from '@/components/inspection/EvidencePreviewGallery';
-import { COLORS, RADIUS, SPACING } from '@/constants/theme';
+import InspectionProgress from '@/components/inspection/InspectionProgress';
+import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
+import { useAuth } from '@/context/AuthContext';
 import { useInspection } from '@/context/InspectionContext';
+import { useNetwork } from '@/context/NetworkContext';
+import { usePlaces } from '@/context/PlacesContext';
+import { fetchStoredInspectionById } from '@/services/inspectionHistoryService';
+import { getStoredInspectionById, type StoredInspection } from '@/storage/inspectionStorage';
+import { getCachedInspectionById } from '@/storage/inspectionHistoryCache';
 import {
   FindingCategory,
   InspectionFinding,
@@ -77,6 +84,9 @@ const CATEGORY_OPTIONS: {
 ];
 
 export default function ViolationsScreen() {
+  const { profile } = useAuth();
+  const { isOnline } = useNetwork();
+  const { getPlaceById } = usePlaces();
   const { tour } = useLocalSearchParams<{
     tour?: string;
   }>();
@@ -104,6 +114,7 @@ export default function ViolationsScreen() {
   const [formError, setFormError] = useState('');
   const [activeFindingId, setActiveFindingId] =
     useState<string | null>(null);
+  const [originalInspection, setOriginalInspection] = useState<StoredInspection | null>(null);
 
   useEffect(() => {
     setDraftInspection((current) =>
@@ -125,6 +136,28 @@ export default function ViolationsScreen() {
       setRemarks(draftInspection?.remarks ?? '');
     }, [draftInspection])
   );
+
+  useEffect(() => {
+    const originalInspectionId = draftInspection?.reinspectionOfInspectionId;
+    if (!originalInspectionId || !profile) {
+      setOriginalInspection(null);
+      return;
+    }
+    let active = true;
+    const scope = { bsiUid: profile.uid, barangayId: profile.assignedBarangayId };
+    void (async () => {
+      try {
+        let original = await getStoredInspectionById(originalInspectionId, scope);
+        if (!original) original = await getCachedInspectionById(originalInspectionId, scope);
+        if (!original && isOnline !== false) original = await fetchStoredInspectionById(originalInspectionId, scope);
+        if (active) setOriginalInspection(original);
+      } catch (error) {
+        console.warn('Unable to load original finding evidence:', error);
+        if (active) setOriginalInspection(null);
+      }
+    })();
+    return () => { active = false; };
+  }, [draftInspection?.reinspectionOfInspectionId, isOnline, profile]);
 
   if (!draftInspection) {
     return (
@@ -149,6 +182,8 @@ export default function ViolationsScreen() {
       </View>
     );
   }
+
+  const place = getPlaceById(draftInspection.placeId);
 
   const addFinding = () => {
     if (!category || !details.trim()) {
@@ -175,6 +210,7 @@ export default function ViolationsScreen() {
   };
 
   const removeFinding = (findingId: string) => {
+    if (findings.find((finding) => finding.id === findingId)?.correctiveAction) return;
     findings
       .find((finding) => finding.id === findingId)
       ?.evidence.forEach((evidence) =>
@@ -186,6 +222,12 @@ export default function ViolationsScreen() {
         (finding) => finding.id !== findingId
       )
     );
+  };
+
+  const updateCorrectiveAction = (findingId: string, changes: Partial<NonNullable<InspectionFinding['correctiveAction']>>) => {
+    setFindings((current) => current.map((finding) => finding.id === findingId && finding.correctiveAction
+      ? { ...finding, correctiveAction: { ...finding.correctiveAction, ...changes } }
+      : finding));
   };
 
   const addEvidence = async (
@@ -293,9 +335,10 @@ export default function ViolationsScreen() {
       return;
     }
 
+    const unresolvedEntries = findings.filter((finding) => !finding.correctiveAction);
     if (
       result === 'compliant' &&
-      findings.length > 0
+      unresolvedEntries.length > 0
     ) {
       Alert.alert(
         'Result Does Not Match Findings',
@@ -373,6 +416,8 @@ export default function ViolationsScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
       >
+        <InspectionProgress currentStep={4} placeName={place?.name} />
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
             Inspection Result
@@ -389,6 +434,8 @@ export default function ViolationsScreen() {
               return (
                 <Pressable
                   key={option.value}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
                   onPress={() =>
                     setResult(option.value)
                   }
@@ -460,30 +507,41 @@ export default function ViolationsScreen() {
                 <Text style={styles.findingTitle}>
                   Finding {index + 1}
                 </Text>
-                <Pressable
-                  accessibilityLabel={`Remove finding ${index + 1}`}
-                  onPress={() =>
-                    removeFinding(finding.id)
-                  }
-                  hitSlop={10}
-                >
-                  <Ionicons
-                    name="trash-outline"
-                    size={20}
-                    color={COLORS.violation}
-                  />
-                </Pressable>
+                <View style={styles.findingHeaderActions}>
+                  <Text style={styles.evidenceCount}>{finding.evidence.length} {finding.evidence.length === 1 ? 'photo' : 'photos'}</Text>
+                  {finding.correctiveAction ? <Text style={styles.correctiveStatus}>{finding.correctiveAction.status}</Text> : <Pressable accessibilityRole="button" accessibilityLabel={`Remove finding ${index + 1}`} onPress={() => removeFinding(finding.id)} hitSlop={10}><Ionicons name="trash-outline" size={20} color={COLORS.violation} /></Pressable>}
+                </View>
               </View>
+              <Text style={styles.findingMetaLabel}>FINDING CATEGORY</Text>
               <Text style={styles.categoryLabel}>
                 {getCategoryLabel(finding.category)}
               </Text>
+              <Text style={styles.findingMetaLabel}>SPECIFIC FINDING</Text>
               <Text style={styles.findingDetails}>
                 {finding.details}
               </Text>
 
-              <View style={styles.evidenceSection}>
+              {finding.correctiveAction ? (() => {
+                const beforeFinding = originalInspection?.findings.find((item) => item.id === finding.correctiveAction?.originalFindingId);
+                return <View style={styles.correctiveSection}>
+                  <View style={styles.comparisonHeader}><View style={styles.comparisonRule} /><Text style={styles.fieldLabel}>BEFORE · ORIGINAL EVIDENCE</Text><View style={styles.comparisonRule} /></View>
+                  {beforeFinding?.evidence.length ? <EvidencePreviewGallery evidence={beforeFinding.evidence} /> : <Text style={styles.emptyEvidence}>No original evidence attached.</Text>}
+                  <Text style={styles.fieldLabel}>CURRENT CORRECTIVE STATUS</Text>
+                  <View style={styles.correctiveOptions}>{(['Unresolved', 'Partially Corrected', 'Corrected'] as const).map((status) => <Pressable key={status} accessibilityRole="radio" accessibilityState={{ selected: finding.correctiveAction?.status === status }} onPress={() => updateCorrectiveAction(finding.id, { status })} style={[styles.correctiveOption, finding.correctiveAction?.status === status && styles.correctiveOptionSelected]}><Text style={[styles.correctiveOptionText, finding.correctiveAction?.status === status && styles.correctiveOptionTextSelected]}>{status}</Text></Pressable>)}</View>
+                  <View style={styles.comparisonHeader}><View style={styles.comparisonRule} /><Text style={styles.fieldLabel}>AFTER · FOLLOW-UP EVIDENCE</Text><View style={styles.comparisonRule} /></View>
+                  {finding.evidence.length ? <EvidencePreviewGallery evidence={finding.evidence} onRemove={(attachment) => removeEvidence(finding.id, attachment.id, attachment.uri)} /> : <Text style={styles.emptyEvidence}>No follow-up evidence added.</Text>}
+                  <View style={styles.evidenceActions}>
+                    <EvidenceButton icon="camera-outline" label="Take Photo" disabled={activeFindingId !== null} onPress={() => void addEvidence(finding.id, 'camera')} />
+                    <EvidenceButton icon="images-outline" label="Choose Photo" disabled={activeFindingId !== null} onPress={() => void addEvidence(finding.id, 'library')} />
+                  </View>
+                  <Text style={styles.fieldLabel}>VERIFICATION NOTE · OPTIONAL</Text>
+                  <TextInput value={finding.correctiveAction.verificationNote ?? ''} onChangeText={(value) => updateCorrectiveAction(finding.id, { verificationNote: value })} placeholder="Add a concise note if needed" placeholderTextColor={COLORS.textMuted} multiline textAlignVertical="top" style={styles.verificationInput} />
+                </View>;
+              })() : null}
+
+              {!finding.correctiveAction ? <View style={styles.evidenceSection}>
                 <Text style={styles.fieldLabel}>
-                  Evidence
+                  Evidence · {finding.evidence.length}
                 </Text>
 
                 <Text style={styles.helpText}>
@@ -525,18 +583,20 @@ export default function ViolationsScreen() {
                     Preparing evidence photo...
                   </Text>
                 )}
-              </View>
+              </View> : null}
             </View>
           ))}
 
           <View style={styles.formCard}>
             <Text style={styles.fieldLabel}>
-              Category
+              Finding Category
             </Text>
             <View style={styles.categoryOptions}>
               {CATEGORY_OPTIONS.map((option) => (
                 <Pressable
                   key={option.value}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: category === option.value }}
                   onPress={() => {
                     setCategory((current) =>
                       current === option.value
@@ -566,7 +626,7 @@ export default function ViolationsScreen() {
             </View>
 
             <Text style={styles.fieldLabel}>
-              Details / Remarks
+              Specific Finding / Notes
             </Text>
             <Text style={styles.helpText}>
               You may use the phone keyboard’s voice-dictation button.
@@ -701,16 +761,19 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primarySoft,
   },
   headerTitle: {
+    ...TYPOGRAPHY.heading,
     fontSize: 19,
-    fontWeight: '700',
     color: COLORS.text,
   },
   headerSubtitle: {
+    ...TYPOGRAPHY.caption,
     marginTop: 2,
-    fontSize: 12,
     color: COLORS.textSecondary,
   },
   content: {
+    width: '100%',
+    maxWidth: 700,
+    alignSelf: 'center',
     gap: SPACING.lg,
     padding: SPACING.lg,
     paddingBottom: 50,
@@ -729,8 +792,8 @@ const styles = StyleSheet.create({
     gap: SPACING.md,
   },
   sectionTitle: {
+    ...TYPOGRAPHY.subheading,
     fontSize: 16,
-    fontWeight: '700',
     color: COLORS.text,
   },
   helpText: {
@@ -752,8 +815,8 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
   },
   optionTitle: {
+    ...TYPOGRAPHY.bodyMedium,
     fontSize: 14,
-    fontWeight: '700',
     color: COLORS.text,
   },
   optionText: {
@@ -777,8 +840,10 @@ const styles = StyleSheet.create({
   },
   findingCard: {
     padding: SPACING.md,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.violation,
     borderRadius: RADIUS.md,
-    backgroundColor: COLORS.violationSoft,
+    backgroundColor: COLORS.surfaceElevated,
   },
   findingHeader: {
     flexDirection: 'row',
@@ -786,8 +851,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   findingTitle: {
-    fontSize: 13,
-    fontWeight: '700',
+    ...TYPOGRAPHY.label,
     color: COLORS.text,
   },
   categoryLabel: {
@@ -797,11 +861,25 @@ const styles = StyleSheet.create({
     color: COLORS.violation,
   },
   findingDetails: {
+    ...TYPOGRAPHY.caption,
     marginTop: SPACING.sm,
-    fontSize: 13,
     lineHeight: 19,
     color: COLORS.text,
   },
+  findingHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  evidenceCount: { fontSize: 10, fontWeight: '700', color: COLORS.textSecondary },
+  correctiveStatus: { fontSize: 10, fontWeight: '800', color: COLORS.primary },
+  findingMetaLabel: { marginTop: SPACING.sm, fontSize: 9, fontWeight: '800', letterSpacing: 0.7, color: COLORS.textMuted },
+  correctiveSection: { gap: SPACING.sm, marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1, borderTopColor: COLORS.divider },
+  comparisonHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.xs },
+  comparisonRule: { flex: 1, height: 1, backgroundColor: COLORS.border },
+  emptyEvidence: { fontSize: 11, color: COLORS.textMuted, fontStyle: 'italic' },
+  correctiveOptions: { gap: 6 },
+  correctiveOption: { minHeight: 40, justifyContent: 'center', paddingHorizontal: SPACING.md, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, backgroundColor: COLORS.background },
+  correctiveOptionSelected: { borderColor: COLORS.primary, backgroundColor: COLORS.primarySoft },
+  correctiveOptionText: { fontSize: 12, fontWeight: '600', color: COLORS.textSecondary },
+  correctiveOptionTextSelected: { color: COLORS.primary, fontWeight: '800' },
+  verificationInput: { minHeight: 68, padding: SPACING.sm, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, backgroundColor: COLORS.background, fontSize: 13, lineHeight: 18, color: COLORS.text },
   evidenceSection: {
     marginTop: SPACING.md,
     paddingTop: SPACING.md,

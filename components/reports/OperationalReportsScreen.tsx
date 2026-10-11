@@ -34,6 +34,7 @@ import {
   type ReportViewModel,
 } from '@/types/report';
 import { formatLocalDate } from '@/utils/dateTime';
+import { shareReportCsv } from '@/utils/reportCsv';
 import { shareReportPdf } from '@/utils/reportPdf';
 import {
   buildCurrentRegisterViewModel,
@@ -46,9 +47,9 @@ import {
 
 const PREVIEW_SIZE = 20;
 const definitions: { kind: ReportKind; title: string; description: string; icon: keyof typeof Ionicons.glyphMap; adminOnly?: boolean }[] = [
-  { kind: 'current_register', title: 'Current Sanitation Register', description: 'One current entry per place, with complete inspection details in the PDF.', icon: 'clipboard-outline' },
-  { kind: 'place_history', title: 'Place Inspection History', description: 'A complete, chronological audit trail for one place or household.', icon: 'time-outline' },
-  { kind: 'municipal_summary', title: 'Municipal/City Consolidated Summary', description: 'One current-status summary row per barangay for municipal oversight.', icon: 'business-outline', adminOnly: true },
+  { kind: 'current_register', title: 'Current Sanitation Register', description: 'One current row per place.', icon: 'clipboard-outline' },
+  { kind: 'place_history', title: 'Place Inspection History', description: 'Chronological records for one place.', icon: 'time-outline' },
+  { kind: 'municipal_summary', title: 'Municipal/City Consolidated Summary', description: 'Current totals by barangay.', icon: 'business-outline', adminOnly: true },
 ];
 
 function DateFilter({ label, value, onChange }: { label: string; value?: string; onChange: (value?: string) => void }) {
@@ -78,6 +79,7 @@ export default function OperationalReportsScreen({ role }: { role: 'admin' | 'bs
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportingCsv, setExportingCsv] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [includePhotoEvidence, setIncludePhotoEvidence] = useState(false);
 
@@ -255,14 +257,32 @@ export default function OperationalReportsScreen({ role }: { role: 'admin' | 'bs
     catch (caught) { Alert.alert('Unable to Export PDF', caught instanceof Error ? caught.message : 'Please try again.'); }
     finally { setExporting(false); }
   };
+  const exportCsv = async () => {
+    if (isOnline === false) {
+      Alert.alert('Connection required', 'CSV export uses the complete synced report. Reconnect and try again.');
+      return;
+    }
+    setExportingCsv(true);
+    try { await shareReportCsv(await buildReport(0, true)); }
+    catch (caught) { Alert.alert('Unable to Export CSV', caught instanceof Error ? caught.message : 'Please try again.'); }
+    finally { setExportingCsv(false); }
+  };
   const switchToRegister = () => { setKind('current_register'); setReport(null); setPage(0); };
   const paginated = kind !== 'municipal_summary';
   const content = <>
     {isOnline === false ? <View style={styles.offline}><Ionicons name="cloud-offline-outline" size={20} color={COLORS.offline} /><Text style={styles.offlineText}>Reports require connectivity.</Text></View> : null}
     <Text style={isAdmin ? adminStyles.sectionTitle : styles.heading}>Report Mode</Text>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catalog}>{availableDefinitions.map((item) => <Pressable key={item.kind} style={[styles.card, item.kind === kind && styles.selected]} onPress={() => chooseKind(item.kind)}><View style={styles.icon}><Ionicons name={item.icon} size={22} color={COLORS.primary} /></View><Text style={styles.cardTitle}>{item.title}</Text><Text style={styles.body}>{item.description}</Text></Pressable>)}</ScrollView>
+    <View style={styles.catalog}>{availableDefinitions.map((item) => {
+      const selected = item.kind === kind;
+      return <Pressable key={item.kind} accessibilityRole="button" accessibilityState={{ selected }} style={({ pressed }) => [styles.card, selected && styles.selected, pressed && styles.pressed]} onPress={() => chooseKind(item.kind)}>
+        <View style={[styles.selectionRail, selected && styles.selectionRailActive]} />
+        <Ionicons name={item.icon} size={21} color={selected ? COLORS.primary : COLORS.textMuted} />
+        <View style={styles.cardCopy}><Text style={styles.cardTitle}>{item.title}</Text><Text style={styles.body}>{item.description}</Text></View>
+        {selected ? <Ionicons name="checkmark-circle" size={20} color={COLORS.primary} /> : <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />}
+      </Pressable>;
+    })}</View>
     <Text style={isAdmin ? adminStyles.sectionTitle : styles.heading}>Report Filters</Text>
-    <Text style={styles.body}>Filters can be combined. The selected scope is printed in the PDF header.</Text>
+    <Text style={styles.body}>Choose the scope and records to include.</Text>
     {isAdmin ? <OptionSelector label="BARANGAY" value={filters.barangayId} options={[{ value: 'all', label: 'Municipality-wide' }, ...barangays.map((item) => ({ value: item.id, label: item.name }))]} onChange={(value) => update('barangayId', value)} /> : <View style={styles.fixedScope}><Text style={styles.label}>BARANGAY</Text><Text style={styles.value}>{assignedBarangayName}</Text></View>}
     <OptionSelector label="PUROK" value={filters.purok} options={[{ value: 'all', label: 'All puroks' }, ...puroks.map((value) => ({ value, label: value }))]} onChange={(value) => update('purok', value)} />
     {kind === 'place_history' ? <OptionSelector label="PLACE / HOUSEHOLD" value={filters.placeId} options={[{ value: 'all', label: 'Select a place or household' }, ...places.map((item) => ({ value: item.id, label: `${item.name} · ${item.purok}` }))]} onChange={(value) => update('placeId', value)} /> : null}
@@ -279,7 +299,10 @@ export default function OperationalReportsScreen({ role }: { role: 'admin' | 'bs
     {error ? <Text style={isAdmin ? adminStyles.error : styles.error}>{error}</Text> : null}
     {report ? <><Text style={isAdmin ? adminStyles.sectionTitle : styles.heading}>Report Preview</Text><ReportPreview report={report} onOpen={(link) => router.push({ pathname: isAdmin ? '/admin/inspection/[id]' : '/inspection/[id]', params: { id: link.id } })} />
       {paginated ? <View style={styles.pagination}><AppButton title="Previous" variant="outline" disabled={page === 0 || loading} onPress={() => void loadPreview(page - 1)} /><Text style={styles.body}>Page {page + 1} · {total.toLocaleString()} matching {kind === 'current_register' ? 'places' : 'records'}</Text><AppButton title="Next" variant="outline" disabled={(page + 1) * PREVIEW_SIZE >= total || loading} onPress={() => void loadPreview(page + 1)} /></View> : <AppButton title="Open Current Register Drilldown" variant="outline" onPress={switchToRegister} />}
-      <AppButton title="Export Complete PDF" loading={exporting} onPress={() => void exportPdf()} /><Text style={styles.note}>{kind === 'municipal_summary' ? 'This aggregate export intentionally omits household checklists. Use Current Sanitation Register for record-level detail.' : 'Preview stays compact. Export retrieves every matching selected record in backend batches and includes its full inspection detail.'}</Text>
+      <View style={styles.exportActions}>
+        <AppButton title="Export Complete PDF" loading={exporting} onPress={() => void exportPdf()} style={styles.exportAction} />
+        <AppButton title="Export CSV" variant="outline" loading={exportingCsv} onPress={() => void exportCsv()} style={styles.exportAction} />
+      </View><Text style={styles.note}>{kind === 'municipal_summary' ? 'This aggregate export intentionally omits household checklists. Use Current Sanitation Register for record-level detail.' : kind === 'current_register' ? 'PDF is the formal record. CSV exports the same filtered current register for spreadsheet work.' : 'Preview stays compact. Export retrieves every matching selected record in backend batches and includes its full inspection detail.'}</Text>
     </> : null}
   </>;
 
@@ -290,14 +313,16 @@ export default function OperationalReportsScreen({ role }: { role: 'admin' | 'bs
 const styles = StyleSheet.create({
   content: { paddingTop: SPACING.xxl, paddingBottom: SPACING.section, gap: SPACING.xl },
   header: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
-  title: { fontSize: 29, lineHeight: 35, letterSpacing: -0.5, fontWeight: '800', color: COLORS.text },
+  title: { ...TYPOGRAPHY.display, fontSize: 29, lineHeight: 35, color: COLORS.text },
   subtitle: { ...TYPOGRAPHY.bodySmall, color: COLORS.textSecondary },
   heading: { ...TYPOGRAPHY.heading, color: COLORS.text },
-  catalog: { gap: SPACING.md, paddingRight: SPACING.lg },
-  card: { width: 244, minHeight: 168, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.xl, padding: SPACING.lg, gap: SPACING.sm, ...SHADOWS.subtle },
-  selected: { borderColor: COLORS.primary, backgroundColor: COLORS.primarySoft },
-  icon: { width: 42, height: 42, borderRadius: RADIUS.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.primarySoft },
-  cardTitle: { ...TYPOGRAPHY.subheading, color: COLORS.text },
+  catalog: { overflow: 'hidden', borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.xl, backgroundColor: COLORS.surface },
+  card: { minHeight: 72, position: 'relative', flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.divider },
+  selected: { backgroundColor: COLORS.primarySoft },
+  selectionRail: { position: 'absolute', left: 0, top: SPACING.sm, bottom: SPACING.sm, width: 3, borderRadius: RADIUS.pill, backgroundColor: COLORS.transparent },
+  selectionRailActive: { backgroundColor: COLORS.primary },
+  cardCopy: { flex: 1, minWidth: 0 },
+  cardTitle: { ...TYPOGRAPHY.bodyMedium, color: COLORS.text },
   body: { ...TYPOGRAPHY.bodySmall, color: COLORS.textSecondary },
   fixedScope: { gap: SPACING.xs, padding: SPACING.md, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.lg, backgroundColor: COLORS.surface },
   label: { ...TYPOGRAPHY.label, color: COLORS.textSecondary },
@@ -313,5 +338,8 @@ const styles = StyleSheet.create({
   offlineText: { ...TYPOGRAPHY.body, color: COLORS.offline },
   error: { ...TYPOGRAPHY.body, color: COLORS.violation },
   pagination: { gap: SPACING.sm, alignItems: 'center' },
+  exportActions: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  exportAction: { flexGrow: 1, minWidth: 150 },
   note: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, textAlign: 'center' },
+  pressed: { opacity: 0.72 },
 });

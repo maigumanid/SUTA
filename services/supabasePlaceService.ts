@@ -13,12 +13,15 @@ export type SupabasePlaceUpdate = Partial<
     Place,
     | 'name'
     | 'representativeName'
+    | 'contactNumber'
     | 'address'
     | 'purok'
+    | 'notes'
     | 'placeType'
     | 'status'
     | 'riskLevel'
     | 'lastInspectionDate'
+    | 'profileStatus'
   >
 >;
 
@@ -68,6 +71,28 @@ export async function createSupabasePlace(place: Place): Promise<Place> {
   }
 }
 
+export async function createSupabasePlaces(places: Place[]): Promise<Place[]> {
+  if (places.length === 0) return [];
+  const client = requireSupabase();
+  const profile = await loadSupabaseBsiProfile();
+  let payload: TablesInsert<'places'>[];
+
+  try {
+    payload = places.map((place) => mapPlaceToInsert(place, profile));
+  } catch (error) {
+    throwSupabaseServiceError('Validate imported places', error);
+  }
+
+  const { data, error } = await client.from('places').insert(payload).select('*');
+  if (error) throwSupabaseServiceError('Import places', error);
+
+  try {
+    return (data ?? []).map(mapSupabasePlace);
+  } catch (mappingError) {
+    throwSupabaseServiceError('Map imported places', mappingError);
+  }
+}
+
 export async function updateSupabasePlace(
   placeId: string,
   changes: SupabasePlaceUpdate
@@ -80,8 +105,12 @@ export async function updateSupabasePlace(
     ...(changes.representativeName !== undefined
       ? { representative_name: changes.representativeName }
       : {}),
+    ...(changes.contactNumber !== undefined
+      ? { contact_number: changes.contactNumber }
+      : {}),
     ...(changes.address !== undefined ? { address: changes.address } : {}),
     ...(changes.purok !== undefined ? { purok: changes.purok } : {}),
+    ...(changes.notes !== undefined ? { notes: changes.notes } : {}),
     ...(changes.placeType !== undefined
       ? { place_type: changes.placeType }
       : {}),
@@ -91,6 +120,9 @@ export async function updateSupabasePlace(
       : {}),
     ...(changes.lastInspectionDate !== undefined
       ? { last_inspection_date: changes.lastInspectionDate }
+      : {}),
+    ...(changes.profileStatus !== undefined
+      ? { profile_status: changes.profileStatus }
       : {}),
   };
 

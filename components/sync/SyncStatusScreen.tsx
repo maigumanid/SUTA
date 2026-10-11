@@ -20,6 +20,7 @@ import {
   RADIUS,
   SHADOWS,
   SPACING,
+  TYPOGRAPHY,
 } from '@/constants/theme';
 
 import { usePlaces } from '@/context/PlacesContext';
@@ -371,9 +372,7 @@ export function SyncStatusScreen({ tabMode = false }: { tabMode?: boolean }) {
             <Text
               style={styles.sectionText}
             >
-              Records saved locally will
-              remain on this device until
-              synchronization is available.
+              Local inspection records and their sync status.
             </Text>
           </View>
 
@@ -465,10 +464,7 @@ export function SyncStatusScreen({ tabMode = false }: { tabMode?: boolean }) {
                 {pendingCount === 1
                   ? 'inspection is'
                   : 'inspections are'}{' '}
-                waiting for a connection and
-                will sync automatically when
-                online. The records are safely
-                stored on this device.
+                stored on this device and waiting to sync automatically.
               </Text>
             </View>
           )}
@@ -818,20 +814,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
     backgroundColor: COLORS.background,
   },
-  tabTitle: { fontSize: 29, lineHeight: 35, letterSpacing: -0.5, fontWeight: '800' },
-  tabSubtitle: { marginTop: 5, fontSize: 14, lineHeight: 20 },
+  tabTitle: { ...TYPOGRAPHY.display, fontSize: 29, lineHeight: 35, color: COLORS.text },
+  tabSubtitle: { ...TYPOGRAPHY.bodySmall, marginTop: 5, color: COLORS.textSecondary },
   diagnosticButton: { paddingVertical: SPACING.sm, alignSelf: 'flex-start' },
   diagnosticLink: { fontSize: 12, fontWeight: '600', color: COLORS.primary },
 
   title: {
-    fontSize: 20,
-    fontWeight: '700',
+    ...TYPOGRAPHY.heading,
     color: COLORS.text,
   },
 
   subtitle: {
+    ...TYPOGRAPHY.caption,
     marginTop: 2,
-    fontSize: 12,
     color: COLORS.textSecondary,
   },
 
@@ -889,8 +884,8 @@ const styles = StyleSheet.create({
   },
 
   summaryTitle: {
+    ...TYPOGRAPHY.bodyMedium,
     fontSize: 15,
-    fontWeight: '700',
     color: COLORS.text,
   },
 
@@ -901,8 +896,8 @@ const styles = StyleSheet.create({
   },
 
   total: {
+    ...TYPOGRAPHY.metric,
     fontSize: 26,
-    fontWeight: '800',
     color: COLORS.primary,
   },
 
@@ -933,8 +928,8 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
+    ...TYPOGRAPHY.subheading,
     fontSize: 17,
-    fontWeight: '700',
     color: COLORS.text,
   },
 

@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
   createSupabasePlace,
+  createSupabasePlaces,
   fetchSupabasePlaces,
   updateSupabasePlace,
 } from '@/services/supabasePlaceService';
@@ -11,6 +12,11 @@ import { UNCLASSIFIED_RISK_STORAGE_VALUE } from '@/utils/riskClassification';
 type RegisterPlaceInput = Pick<
   Place,
   'name' | 'representativeName' | 'purok' | 'address' | 'placeType'
+>;
+
+export type ImportPlaceInput = Pick<
+  Place,
+  'name' | 'representativeName' | 'contactNumber' | 'purok' | 'address' | 'placeType' | 'notes'
 >;
 
 function cacheKey(uid: string, barangayId: string) {
@@ -58,11 +64,14 @@ export async function savePlace(
     await updateSupabasePlace(place.id, {
       name: place.name,
       representativeName: place.representativeName,
+      contactNumber: place.contactNumber,
       address: place.address,
       purok: place.purok,
+      notes: place.notes,
       placeType: place.placeType,
       status: place.status,
       riskLevel: place.riskLevel,
+      profileStatus: place.profileStatus,
       ...(place.lastInspectionDate
         ? { lastInspectionDate: place.lastInspectionDate }
         : {}),
@@ -90,13 +99,59 @@ export async function registerPlace(
 
   await createSupabasePlace({
     ...place,
+    contactNumber: '',
+    notes: '',
     id,
     barangayId,
     barangay,
     createdByUid: uid,
     status: 'Not Inspected',
     riskLevel: UNCLASSIFIED_RISK_STORAGE_VALUE,
+    profileStatus: 'complete',
+    sourceKind: 'manual',
   });
 
   return id;
+}
+
+export async function importPlaces(
+  rows: ImportPlaceInput[],
+  uid: string,
+  barangayId: string,
+  barangay: string,
+  batchId: string
+) {
+  const places: Place[] = rows.map((row, index) => ({
+    ...row,
+    id: `${batchId}_${index + 1}_${Math.random().toString(36).slice(2, 7)}`,
+    barangayId,
+    barangay,
+    createdByUid: uid,
+    status: 'Not Inspected',
+    riskLevel: UNCLASSIFIED_RISK_STORAGE_VALUE,
+    profileStatus:
+      row.representativeName.trim() && row.purok.trim() && row.placeType
+        ? 'complete'
+        : 'starter',
+    sourceKind: 'bulk_import',
+    importBatchId: batchId,
+  }));
+
+  return createSupabasePlaces(places);
+}
+
+export async function updatePlaceProfile(
+  placeId: string,
+  changes: Pick<
+    Place,
+    'name' | 'address' | 'representativeName' | 'contactNumber' | 'purok' | 'placeType' | 'notes'
+  >
+) {
+  return updateSupabasePlace(placeId, {
+    ...changes,
+    profileStatus:
+      changes.representativeName.trim() && changes.purok.trim()
+        ? 'complete'
+        : 'starter',
+  });
 }

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Linking,
   Pressable,
@@ -11,16 +11,26 @@ import {
 } from 'react-native';
 
 import AppButton from '@/components/common/AppButton';
+import InspectionProgress from '@/components/inspection/InspectionProgress';
 import { COLORS, RADIUS, SPACING } from '@/constants/theme';
 import { createInitialHouseholdInspection } from '@/constants/householdInspection';
+import { useAuth } from '@/context/AuthContext';
 import { useInspection } from '@/context/InspectionContext';
+import { useNetwork } from '@/context/NetworkContext';
 import { usePlaces } from '@/context/PlacesContext';
+import { fetchStoredInspectionById } from '@/services/inspectionHistoryService';
+import { getStoredInspectionById, type StoredInspection } from '@/storage/inspectionStorage';
+import { getCachedInspectionById } from '@/storage/inspectionHistoryCache';
+import type { InspectionFinding } from '@/types/householdInspection';
+import { formatPurok } from '@/utils/placeDisplay';
 import {
   captureInspectionLocation,
   InspectionLocationResult,
 } from '@/services/locationService';
 
 export default function NewInspectionScreen() {
+  const { profile } = useAuth();
+  const { isOnline } = useNetwork();
   const { getPlaceById } = usePlaces();
   const {
     placeId,
@@ -65,6 +75,62 @@ export default function NewInspectionScreen() {
     });
   const [locationFailure, setLocationFailure] =
     useState<InspectionLocationResult | null>(null);
+  const [correctiveSource, setCorrectiveSource] = useState<StoredInspection | null>(null);
+  const [loadingCorrectiveSource, setLoadingCorrectiveSource] = useState(Boolean(originalInspectionId));
+  const [correctiveSourceError, setCorrectiveSourceError] = useState('');
+
+  useEffect(() => {
+    if (!originalInspectionId || !profile) {
+      setCorrectiveSource(null);
+      setCorrectiveSourceError('');
+      setLoadingCorrectiveSource(false);
+      return;
+    }
+    let active = true;
+    const scope = { bsiUid: profile.uid, barangayId: profile.assignedBarangayId };
+    void (async () => {
+      setLoadingCorrectiveSource(true);
+      setCorrectiveSourceError('');
+      try {
+        let source = await getStoredInspectionById(originalInspectionId, scope);
+        if (!source) source = await getCachedInspectionById(originalInspectionId, scope);
+        if (!source && isOnline !== false) source = await fetchStoredInspectionById(originalInspectionId, scope);
+        if (!source) throw new Error('The original inspection is not available on this device. Reconnect to load its findings.');
+        if (!active) return;
+        setCorrectiveSource(source);
+        const linkedFindings: InspectionFinding[] = source.findings.map((finding) => ({
+          id: `followup_${source!.id}_${finding.id}`,
+          category: finding.category,
+          details: finding.details,
+          evidence: [],
+          correctiveAction: {
+            originalInspectionId: source!.id,
+            originalFindingId: finding.id,
+            status: 'Unresolved',
+          },
+        }));
+        setDraftInspection((current) => {
+          if (!current) {
+            return current;
+          }
+          if (
+            current.placeId === placeId &&
+            current.reinspectionId === reinspectionId &&
+            current.reinspectionOfInspectionId === originalInspectionId
+          ) {
+            const existingLinks = new Set(current.findings.flatMap((finding) => finding.correctiveAction ? [`${finding.correctiveAction.originalInspectionId}:${finding.correctiveAction.originalFindingId}`] : []));
+            return { ...current, findings: [...current.findings, ...linkedFindings.filter((finding) => !existingLinks.has(`${finding.correctiveAction!.originalInspectionId}:${finding.correctiveAction!.originalFindingId}`))] };
+          }
+          return current;
+        });
+      } catch (error) {
+        if (active) setCorrectiveSourceError(error instanceof Error ? error.message : 'Unable to load original findings.');
+      } finally {
+        if (active) setLoadingCorrectiveSource(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [isOnline, originalInspectionId, placeId, profile, reinspectionId, setDraftInspection]);
 
   const place = placeId
     ? getPlaceById(placeId)
@@ -99,6 +165,17 @@ export default function NewInspectionScreen() {
 
   const isHousehold =
     place.placeType === 'Household / Residence';
+  const linkedFindings: InspectionFinding[] = correctiveSource?.findings.map((finding) => ({
+    id: `followup_${correctiveSource.id}_${finding.id}`,
+    category: finding.category,
+    details: finding.details,
+    evidence: [],
+    correctiveAction: {
+      originalInspectionId: correctiveSource.id,
+      originalFindingId: finding.id,
+      status: 'Unresolved',
+    },
+  })) ?? [];
 
   const openChecklist = (
     result: InspectionLocationResult
@@ -125,10 +202,10 @@ export default function NewInspectionScreen() {
             ...draftInspection,
             ...locationChanges,
           }
-        : createInitialHouseholdInspection(
-            place.id,
-            locationChanges
-          )
+        : {
+            ...createInitialHouseholdInspection(place.id, locationChanges),
+            findings: linkedFindings,
+          }
     );
 
     requestAnimationFrame(() => {
@@ -216,6 +293,8 @@ export default function NewInspectionScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
       >
+        <InspectionProgress currentStep={1} placeName={place.name} />
+
         <View style={styles.notice}>
           <View style={styles.noticeIcon}>
             <Ionicons
@@ -283,7 +362,7 @@ export default function NewInspectionScreen() {
             <InfoRow
               icon="location-outline"
               label="Purok"
-              value={place.purok}
+              value={formatPurok(place.purok)}
             />
           </View>
         </View>
@@ -372,7 +451,7 @@ export default function NewInspectionScreen() {
           <AppButton
             title="Continue to Checklist"
             onPress={() => openChecklist(capturedLocation)}
-            disabled={!isHousehold}
+            disabled={!isHousehold || loadingCorrectiveSource || Boolean(correctiveSourceError)}
           />
         ) : locationFailure ? (
           <View style={styles.locationActions}>
@@ -386,7 +465,7 @@ export default function NewInspectionScreen() {
               title="Continue Without Location"
               variant="outline"
               onPress={() => openChecklist(locationFailure)}
-              disabled={!isHousehold}
+              disabled={!isHousehold || loadingCorrectiveSource || Boolean(correctiveSourceError)}
             />
             {shouldOpenLocationSettings && (
               <AppButton
@@ -402,10 +481,14 @@ export default function NewInspectionScreen() {
           <AppButton
             title="Capture Current Location"
             onPress={captureCurrentLocation}
-            disabled={!isHousehold}
+            disabled={!isHousehold || loadingCorrectiveSource || Boolean(correctiveSourceError)}
             loading={isCapturingLocation}
           />
         )}
+
+        {loadingCorrectiveSource ? <Text style={styles.developmentNote}>Loading original findings for corrective verification…</Text> : null}
+        {correctiveSourceError ? <View style={styles.locationFailure}><Ionicons name="alert-circle-outline" size={20} color={COLORS.violation} /><Text style={styles.locationFailureText}>{correctiveSourceError}</Text></View> : null}
+        {correctiveSource && correctiveSource.findings.length === 0 ? <Text style={styles.developmentNote}>The linked original inspection contains no findings to verify.</Text> : null}
 
         {!isHousehold && (
           <Text style={styles.developmentNote}>
@@ -518,6 +601,9 @@ const styles = StyleSheet.create({
   },
 
   content: {
+    width: '100%',
+    maxWidth: 700,
+    alignSelf: 'center',
     padding: SPACING.lg,
     paddingBottom: 40,
     gap: SPACING.lg,

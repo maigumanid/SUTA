@@ -42,6 +42,12 @@ export type InspectionRecordFinding = {
   category: string;
   description: string;
   evidence: InspectionRecordEvidence[];
+  correctiveAction?: {
+    originalInspectionId: string;
+    originalFindingId: string;
+    status: 'Unresolved' | 'Partially Corrected' | 'Corrected';
+    verificationNote?: string;
+  };
 };
 
 export type InspectionRecordReinspection = {

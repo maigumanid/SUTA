@@ -15,6 +15,7 @@ import {
 import { useInspection } from '@/context/InspectionContext';
 import AppButton from '@/components/common/AppButton';
 import KeyboardSafeView from '@/components/common/KeyboardSafeView';
+import InspectionProgress from '@/components/inspection/InspectionProgress';
 
 import {
   BinaryField,
@@ -33,6 +34,7 @@ import {
   COLORS,
   RADIUS,
   SPACING,
+  TYPOGRAPHY,
 } from '@/constants/theme';
 
 import {
@@ -361,13 +363,6 @@ const isTourActive = tour === 'true';
           </Text>
         </View>
 
-        <View style={styles.stepBadge}>
-          <Text style={styles.stepText}>
-            {currentSection === 'water'
-              ? '1 of 2'
-              : '2 of 2'}
-          </Text>
-        </View>
       </View>
 
       <ScrollView
@@ -378,6 +373,8 @@ const isTourActive = tour === 'true';
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
       >
+        <InspectionProgress currentStep={currentSection === 'water' ? 2 : 3} placeName={place.name} />
+
         {currentSection === 'water' ? (
           <>
             <View style={styles.intro}>
@@ -658,6 +655,8 @@ const isTourActive = tour === 'true';
                       }
                       yesLabel="Presence of E. coli"
                       noLabel="Absence of E. coli"
+                      yesTone="danger"
+                      noTone="success"
                       error={
                         errors.microbialResult
                       }
@@ -759,6 +758,8 @@ const isTourActive = tour === 'true';
                       }
                       yesLabel="Within allowable PNSDW limit for arsenic"
                       noLabel="Above allowable PNSDW limit for arsenic"
+                      yesTone="success"
+                      noTone="danger"
                       error={errors.arsenicResult}
                       onChange={(value) => {
                         updateArsenic({
@@ -1030,32 +1031,22 @@ const styles = StyleSheet.create({
   },
 
   headerTitle: {
+    ...TYPOGRAPHY.heading,
     fontSize: 19,
-    fontWeight: '700',
     color: COLORS.text,
   },
 
   headerSubtitle: {
+    ...TYPOGRAPHY.caption,
     marginTop: 2,
-    fontSize: 12,
     color: COLORS.textSecondary,
   },
 
-  stepBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-    backgroundColor: COLORS.primarySoft,
-  },
-
-  stepText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.primary,
-  },
-
   content: {
-    gap: SPACING.lg,
+    width: '100%',
+    maxWidth: 700,
+    alignSelf: 'center',
+    gap: SPACING.md,
     padding: SPACING.lg,
     paddingBottom: 50,
   },
@@ -1078,8 +1069,8 @@ const styles = StyleSheet.create({
   },
 
   introTitle: {
+    ...TYPOGRAPHY.bodyMedium,
     fontSize: 15,
-    fontWeight: '700',
     color: COLORS.text,
   },
 
@@ -1092,9 +1083,10 @@ const styles = StyleSheet.create({
 
   section: {
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: COLORS.divider,
+    borderRadius: RADIUS.md,
     backgroundColor: COLORS.surface,
   },
 
@@ -1105,6 +1097,7 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.divider,
+    backgroundColor: COLORS.primarySoft,
   },
 
   number: {
@@ -1123,8 +1116,8 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
+    ...TYPOGRAPHY.bodyMedium,
     fontSize: 15,
-    fontWeight: '700',
     color: COLORS.text,
   },
 
@@ -1193,7 +1186,9 @@ const styles = StyleSheet.create({
   },
 
   categoryHeader: {
-    paddingVertical: 4,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.aquaSoft,
   },
 
   categoryTitle: {

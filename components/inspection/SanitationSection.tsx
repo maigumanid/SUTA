@@ -15,6 +15,7 @@ import {
   COLORS,
   RADIUS,
   SPACING,
+  TYPOGRAPHY,
 } from '@/constants/theme';
 
 import {
@@ -511,7 +512,7 @@ function CalculatedStatus({
 
 const styles = StyleSheet.create({
   container: {
-    gap: SPACING.lg,
+    gap: SPACING.md,
   },
 
   flex: {
@@ -536,23 +537,24 @@ const styles = StyleSheet.create({
   },
 
   introTitle: {
+    ...TYPOGRAPHY.bodyMedium,
     fontSize: 15,
-    fontWeight: '700',
     color: COLORS.text,
   },
 
   introText: {
+    ...TYPOGRAPHY.caption,
     marginTop: 4,
-    fontSize: 12,
     lineHeight: 18,
     color: COLORS.textSecondary,
   },
 
   section: {
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: COLORS.divider,
+    borderRadius: RADIUS.md,
     backgroundColor: COLORS.surface,
   },
 
@@ -563,6 +565,7 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.divider,
+    backgroundColor: COLORS.primarySoft,
   },
 
   number: {
@@ -581,8 +584,8 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
+    ...TYPOGRAPHY.bodyMedium,
     fontSize: 14,
-    fontWeight: '700',
     color: COLORS.text,
   },
 
@@ -599,13 +602,13 @@ const styles = StyleSheet.create({
   },
 
   help: {
-    fontSize: 11,
+    ...TYPOGRAPHY.tiny,
     lineHeight: 17,
     color: COLORS.textSecondary,
   },
 
   question: {
-    fontSize: 13,
+    ...TYPOGRAPHY.caption,
     lineHeight: 19,
     color: COLORS.text,
   },

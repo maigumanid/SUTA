@@ -53,7 +53,18 @@ export type InspectionFinding = {
   category: FindingCategory;
   details: string;
   evidence: EvidenceAttachment[];
+  correctiveAction?: {
+    originalInspectionId: string;
+    originalFindingId: string;
+    status: CorrectiveActionStatus;
+    verificationNote?: string;
+  };
 };
+
+export type CorrectiveActionStatus =
+  | 'Unresolved'
+  | 'Partially Corrected'
+  | 'Corrected';
 
 export type BackendInspectionFinding = Omit<
   InspectionFinding,

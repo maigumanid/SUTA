@@ -137,3 +137,42 @@ export async function captureInspectionLocation(): Promise<InspectionLocationRes
     };
   }
 }
+
+export async function getCurrentFieldLocation(): Promise<InspectionLocationResult> {
+  const attemptedAt = new Date().toISOString();
+
+  try {
+    const permission = await Location.requestForegroundPermissionsAsync();
+    if (permission.status !== 'granted') {
+      return {
+        status: 'permission_denied',
+        attemptedAt,
+        canAskAgain: permission.canAskAgain,
+      };
+    }
+
+    if (!(await Location.hasServicesEnabledAsync())) {
+      return {
+        status: 'services_disabled',
+        attemptedAt,
+      };
+    }
+
+    const position = await getCurrentPositionWithTimeout();
+    return {
+      status: 'captured',
+      attemptedAt,
+      location: toInspectionLocation(position, attemptedAt),
+    };
+  } catch (error) {
+    console.warn('Unable to obtain current field location:', error);
+    return {
+      status: 'unavailable',
+      attemptedAt,
+      errorMessage:
+        error instanceof Error
+          ? error.message
+          : 'Current device location is unavailable.',
+    };
+  }
+}

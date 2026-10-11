@@ -13,14 +13,14 @@ export default function NotificationCenterScreen() {
   const { isOnline } = useNetwork();
   return <ScreenContainer>
     <View style={styles.header}>
-      <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace('/')}><Ionicons name="arrow-back" size={24} color={COLORS.text} /></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.canGoBack() ? router.back() : router.replace('/')} style={styles.headerAction}><Ionicons name="arrow-back" size={24} color={COLORS.text} /></Pressable>
       <Text style={styles.title}>Alerts</Text>
-      <Pressable disabled={!unreadCount || isOnline === false} onPress={() => void markAllRead()}><Text style={[styles.readAll, (!unreadCount || isOnline === false) && styles.disabled]}>Read all</Text></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel="Mark all alerts as read" accessibilityState={{ disabled: !unreadCount || isOnline === false }} disabled={!unreadCount || isOnline === false} onPress={() => void markAllRead()} style={styles.headerAction}><Text style={[styles.readAll, (!unreadCount || isOnline === false) && styles.disabled]}>Read all</Text></Pressable>
     </View>
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.permissionCard}>
         <Text style={styles.cardTitle}>Operational alerts</Text>
-        <Text style={styles.body}>Operational alerts appear here when you open SUTA. Reinspection reminders can be added to your device calendar from the reinspection screen.</Text>
+        <Text style={styles.body}>In-app updates for reinspections, risk, and assignments. Calendar reminders are managed from each reinspection.</Text>
       </View>
       {loading && !items.length ? <ActivityIndicator color={COLORS.primary} /> : null}
       {error ? <Text style={isOnline === false ? styles.offlineInfo : styles.error}>{error}</Text> : null}
@@ -37,6 +37,7 @@ export default function NotificationCenterScreen() {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: SPACING.lg },
+  headerAction: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   title: { ...TYPOGRAPHY.heading, color: COLORS.text }, readAll: { ...TYPOGRAPHY.label, color: COLORS.primary }, disabled: { color: COLORS.textDisabled },
   content: { gap: SPACING.md, paddingBottom: SPACING.section }, permissionCard: { padding: SPACING.lg, gap: SPACING.md, borderRadius: RADIUS.xl, backgroundColor: COLORS.primarySoft, borderWidth: 1, borderColor: COLORS.primaryLight },
   item: { padding: SPACING.lg, gap: SPACING.sm, borderRadius: RADIUS.xl, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, ...SHADOWS.subtle }, unread: { borderColor: COLORS.primary, backgroundColor: COLORS.primarySoft },

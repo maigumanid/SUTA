@@ -69,6 +69,9 @@ export default function AppButton({
 
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
       onPress={onPress}
       disabled={isDisabled}
       style={({ pressed }) => [
@@ -134,6 +137,7 @@ const styles = StyleSheet.create({
 
   text: {
     ...TYPOGRAPHY.button,
+    letterSpacing: 0.1,
     textAlign: 'center',
   },
 

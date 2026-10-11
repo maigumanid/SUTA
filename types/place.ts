@@ -18,6 +18,9 @@ export type InspectionStatus =
 
 export type RiskLevel = 'Low' | 'Moderate' | 'High' | 'Unclassified';
 
+export type PlaceProfileStatus = 'starter' | 'complete';
+export type PlaceSourceKind = 'manual' | 'bulk_import';
+
 export type Place = {
   id: string;
 
@@ -31,9 +34,13 @@ export type Place = {
 
   representativeName: string;
 
+  contactNumber: string;
+
   address: string;
 
   purok: string;
+
+  notes: string;
 
   placeType: PlaceType;
 
@@ -42,4 +49,10 @@ export type Place = {
   riskLevel: RiskLevel;
 
   lastInspectionDate?: string;
+
+  profileStatus: PlaceProfileStatus;
+
+  sourceKind: PlaceSourceKind;
+
+  importBatchId?: string;
 };

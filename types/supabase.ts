@@ -248,15 +248,20 @@ export type Database = {
           address: string
           barangay_id: string
           barangay_name: string | null
+          contact_number: string
           created_at: string
           created_by_uid: string
           id: string
+          import_batch_id: string | null
           last_inspection_date: string | null
           name: string
+          notes: string
           place_type: string
+          profile_status: string
           purok: string
           representative_name: string
           risk_level: string
+          source_kind: string
           status: string
           updated_at: string
           updated_by_uid: string | null
@@ -265,15 +270,20 @@ export type Database = {
           address: string
           barangay_id: string
           barangay_name?: string | null
+          contact_number?: string
           created_at?: string
           created_by_uid: string
           id: string
+          import_batch_id?: string | null
           last_inspection_date?: string | null
           name: string
+          notes?: string
           place_type: string
+          profile_status?: string
           purok: string
           representative_name: string
           risk_level?: string
+          source_kind?: string
           status?: string
           updated_at?: string
           updated_by_uid?: string | null
@@ -282,15 +292,20 @@ export type Database = {
           address?: string
           barangay_id?: string
           barangay_name?: string | null
+          contact_number?: string
           created_at?: string
           created_by_uid?: string
           id?: string
+          import_batch_id?: string | null
           last_inspection_date?: string | null
           name?: string
+          notes?: string
           place_type?: string
+          profile_status?: string
           purok?: string
           representative_name?: string
           risk_level?: string
+          source_kind?: string
           status?: string
           updated_at?: string
           updated_by_uid?: string | null

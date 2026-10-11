@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 
 import AppButton from '@/components/common/AppButton';
+import CorrectiveFindingComparison from '@/components/inspection/CorrectiveFindingComparison';
 import EvidencePreviewGallery from '@/components/inspection/EvidencePreviewGallery';
 import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -386,16 +387,37 @@ export default function InspectionDetailsScreen() {
               <View
                 key={finding.id}
                 style={[
-                  styles.finding,
+                  !finding.correctiveAction && styles.finding,
                   index < inspection.findings.length - 1 && styles.rowBorder,
                 ]}
               >
-                <Text style={styles.findingTitle}>Finding {index + 1}</Text>
-                <Text style={styles.findingCategory}>
-                  {formatFindingCategory(finding.category)}
-                </Text>
-                <Text style={styles.findingDetails}>{finding.details}</Text>
-                <EvidencePreviewGallery evidence={finding.evidence} />
+                {finding.correctiveAction ? (() => {
+                  const original = placeHistory.find((item) => 'findings' in item && item.id === finding.correctiveAction?.originalInspectionId);
+                  const beforeFinding = original && 'findings' in original
+                    ? original.findings.find((item) => item.id === finding.correctiveAction?.originalFindingId)
+                    : undefined;
+                  return (
+                    <CorrectiveFindingComparison
+                      afterEvidence={finding.evidence}
+                      beforeEvidence={beforeFinding?.evidence ?? []}
+                      beforeUnavailable={!original}
+                      category={formatFindingCategory(finding.category)}
+                      findingNumber={index + 1}
+                      originalDescription={beforeFinding?.details ?? finding.details}
+                      status={finding.correctiveAction.status}
+                      verificationNote={finding.correctiveAction.verificationNote}
+                    />
+                  );
+                })() : (
+                  <>
+                    <Text style={styles.findingTitle}>Finding {index + 1}</Text>
+                    <Text style={styles.findingCategory}>
+                      {formatFindingCategory(finding.category)}
+                    </Text>
+                    <Text style={styles.findingDetails}>{finding.details}</Text>
+                    <EvidencePreviewGallery evidence={finding.evidence} />
+                  </>
+                )}
               </View>
             ))
           )}
@@ -560,7 +582,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primarySoft,
   },
   title: { ...TYPOGRAPHY.title, color: COLORS.text },
-  secondary: { marginTop: 2, fontSize: 12, color: COLORS.textSecondary },
+  secondary: { ...TYPOGRAPHY.caption, marginTop: 2, color: COLORS.textSecondary },
   content: { gap: SPACING.lg, padding: SPACING.lg, paddingBottom: 50 },
   section: {
     overflow: 'hidden',
@@ -578,22 +600,22 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.divider,
   },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text },
+  sectionTitle: { ...TYPOGRAPHY.bodyMedium, fontSize: 15, color: COLORS.text },
   sectionBody: { paddingHorizontal: SPACING.md },
   row: { paddingVertical: SPACING.md },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.divider },
-  rowLabel: { fontSize: 11, fontWeight: '600', color: COLORS.textMuted },
-  rowValue: { marginTop: 4, fontSize: 13, lineHeight: 19, color: COLORS.text },
+  rowLabel: { ...TYPOGRAPHY.tiny, color: COLORS.textMuted },
+  rowValue: { ...TYPOGRAPHY.caption, marginTop: 4, lineHeight: 19, color: COLORS.text },
   finding: { paddingVertical: SPACING.md },
-  findingTitle: { fontSize: 13, fontWeight: '700', color: COLORS.text },
+  findingTitle: { ...TYPOGRAPHY.label, color: COLORS.text },
   findingCategory: {
     marginTop: 2,
     fontSize: 11,
     fontWeight: '700',
     color: COLORS.violation,
   },
-  findingDetails: { marginTop: SPACING.sm, fontSize: 13, lineHeight: 19, color: COLORS.text },
-  remarks: { paddingVertical: SPACING.md, fontSize: 13, lineHeight: 20, color: COLORS.text },
+  findingDetails: { ...TYPOGRAPHY.caption, marginTop: SPACING.sm, lineHeight: 19, color: COLORS.text },
+  remarks: { ...TYPOGRAPHY.caption, paddingVertical: SPACING.md, lineHeight: 20, color: COLORS.text },
   emptySection: {
     paddingVertical: SPACING.md,
     fontSize: 12,
@@ -608,7 +630,7 @@ const styles = StyleSheet.create({
     padding: SPACING.xl,
     backgroundColor: COLORS.background,
   },
-  emptyTitle: { fontSize: 19, fontWeight: '700', color: COLORS.text },
+  emptyTitle: { ...TYPOGRAPHY.heading, fontSize: 19, color: COLORS.text },
   emptyText: {
     maxWidth: 320,
     textAlign: 'center',

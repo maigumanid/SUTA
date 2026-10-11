@@ -5,14 +5,13 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { COLORS, RADIUS, SPACING } from '@/constants/theme';
+import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useNetwork } from '@/context/NetworkContext';
 import type { EvidenceAttachment } from '@/types/householdInspection';
 import { createInspectionEvidenceSignedUrl } from '@/services/inspectionRecordService';
@@ -22,11 +21,13 @@ import { readInspectionEvidenceStoragePath } from '@/utils/inspectionEvidence';
 type EvidencePreviewGalleryProps = {
   evidence: EvidenceAttachment[];
   onRemove?: (attachment: EvidenceAttachment) => void;
+  showCount?: boolean;
 };
 
 export default function EvidencePreviewGallery({
   evidence,
   onRemove,
+  showCount = true,
 }: EvidencePreviewGalleryProps) {
   const { isOnline } = useNetwork();
   const [previewId, setPreviewId] = useState<string | null>(null);
@@ -123,16 +124,14 @@ export default function EvidencePreviewGallery({
 
   return (
     <>
-      <Text style={styles.count}>
-        Evidence: {evidence.length}{' '}
-        {evidence.length === 1 ? 'photo' : 'photos'}
-      </Text>
+      {showCount ? (
+        <Text style={styles.count}>
+          Evidence: {evidence.length}{' '}
+          {evidence.length === 1 ? 'photo' : 'photos'}
+        </Text>
+      ) : null}
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.list}
-      >
+      <View style={styles.list}>
         {evidence.map((attachment, index) => (
           <View key={attachment.id} style={styles.thumbnailWrapper}>
             <Pressable
@@ -164,7 +163,7 @@ export default function EvidencePreviewGallery({
               ) : (
                 <Image
                   source={{ uri: displayUris[attachment.id] }}
-                  contentFit="cover"
+                  contentFit="contain"
                   onError={() => void handleLoadError(attachment)}
                   style={styles.thumbnail}
                 />
@@ -198,7 +197,7 @@ export default function EvidencePreviewGallery({
             ) : null}
           </View>
         ))}
-      </ScrollView>
+      </View>
 
       <Modal
         animationType="fade"
@@ -245,26 +244,31 @@ export default function EvidencePreviewGallery({
 
 const styles = StyleSheet.create({
   count: {
+    ...TYPOGRAPHY.tiny,
     marginTop: SPACING.sm,
-    fontSize: 11,
-    fontWeight: '600',
     color: COLORS.textSecondary,
   },
   list: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: SPACING.sm,
     paddingTop: SPACING.sm,
     paddingBottom: SPACING.xs,
   },
   thumbnailButton: {
     position: 'relative',
+    width: '100%',
     borderRadius: RADIUS.md,
   },
   thumbnailWrapper: {
     position: 'relative',
+    width: '31%',
+    minWidth: 88,
+    maxWidth: 124,
   },
   thumbnail: {
-    width: 104,
-    height: 104,
+    width: '100%',
+    aspectRatio: 1,
     borderRadius: RADIUS.md,
     backgroundColor: COLORS.surfaceMuted,
   },
@@ -315,8 +319,8 @@ const styles = StyleSheet.create({
     paddingTop: SPACING.sm,
   },
   previewTitle: {
+    ...TYPOGRAPHY.subheading,
     fontSize: 16,
-    fontWeight: '700',
     color: COLORS.white,
   },
   closeButton: {

@@ -54,6 +54,8 @@ export default function AppInput({
       >
         <TextInput
           {...props}
+          accessibilityLabel={props.accessibilityLabel ?? label}
+          accessibilityState={{ disabled: props.editable === false }}
           style={styles.input}
           placeholderTextColor={
             COLORS.textMuted
@@ -124,7 +126,7 @@ export default function AppInput({
       </View>
 
       {error ? (
-        <Text style={styles.errorText}>
+        <Text accessibilityLiveRegion="polite" style={styles.errorText}>
           {error}
         </Text>
       ) : null}

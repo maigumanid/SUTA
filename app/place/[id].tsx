@@ -1,11 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import {
+  type Href,
   router,
   useFocusEffect,
   useLocalSearchParams,
 } from 'expo-router';
 import {
   ActivityIndicator,
+  Alert,
   BackHandler,
   Pressable,
   ScrollView,
@@ -26,7 +28,7 @@ import TourOverlay, {
 } from '@/components/onboarding/TourOverlay';
 
 import AppButton from '@/components/common/AppButton';
-import { COLORS, RADIUS, SPACING } from '@/constants/theme';
+import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
 import { useNetwork } from '@/context/NetworkContext';
 import { usePlaces } from '@/context/PlacesContext';
@@ -52,6 +54,8 @@ import {
 } from '@/utils/inspectionDisplay';
 import { getRiskClassification } from '@/utils/riskClassification';
 import { isReinspectionOverdue } from '@/utils/reinspection';
+import { formatPurok } from '@/utils/placeDisplay';
+import { shareComplianceNoticePdf } from '@/utils/complianceNoticePdf';
 
 export default function PlaceDetailsScreen() {
   const { getPlaceById, isLoading } = usePlaces();
@@ -76,6 +80,7 @@ export default function PlaceDetailsScreen() {
     useState<string | null>(null);
   const [reinspection, setReinspection] =
     useState<ReinspectionRecord | null>(null);
+  const [isGeneratingNotice, setIsGeneratingNotice] = useState(false);
 
   const profileRef = useRef<View>(null);
   const informationRef = useRef<View>(null);
@@ -361,6 +366,55 @@ export default function PlaceDetailsScreen() {
   const isHousehold =
     place.placeType === 'Household / Residence';
   const riskClassification = getRiskClassification(place.riskLevel);
+  const fullHistory = inspectionHistory.filter(
+    (record): record is StoredInspection => 'findings' in record
+  );
+  const correctiveByFinding = new Map<string, { status: 'Unresolved' | 'Partially Corrected' | 'Corrected'; date: string }>();
+  [...fullHistory]
+    .sort((left, right) => Date.parse(left.inspectionDate) - Date.parse(right.inspectionDate))
+    .forEach((record) => record.findings.forEach((finding) => {
+      const correction = finding.correctiveAction;
+      if (correction) correctiveByFinding.set(`${correction.originalInspectionId}:${correction.originalFindingId}`, { status: correction.status, date: record.inspectionDate });
+    }));
+  const correctiveCounts = [...correctiveByFinding.values()].reduce(
+    (counts, finding) => {
+      const status = finding.status;
+      if (status === 'Corrected') counts.corrected += 1;
+      else if (status === 'Partially Corrected') counts.partial += 1;
+      else if (status === 'Unresolved') counts.unresolved += 1;
+      return counts;
+    },
+    { corrected: 0, partial: 0, unresolved: 0 }
+  );
+  const latestFailedInspection = [...fullHistory]
+    .filter((record) => (record.result === 'non_compliant' || record.result === 'for_reinspection') && record.findings.some((finding) => !finding.correctiveAction))
+    .sort((left, right) => Date.parse(right.inspectionDate) - Date.parse(left.inspectionDate))[0];
+
+  const generateNotice = async () => {
+    if (!latestFailedInspection || !profile) return;
+    setIsGeneratingNotice(true);
+    try {
+      await shareComplianceNoticePdf({
+        place,
+        inspection: latestFailedInspection,
+        barangay: place.barangay || profile.assignedBarangay,
+        preparedBy: profile.name,
+        correctiveStatuses: Object.fromEntries(
+          latestFailedInspection.findings
+            .filter((finding) => !finding.correctiveAction)
+            .flatMap((finding) => {
+              const value = correctiveByFinding.get(`${latestFailedInspection.id}:${finding.id}`);
+              return value ? [[finding.id, value.status] as const] : [];
+            })
+        ),
+        ...(reinspection?.status === 'pending' ? { scheduledDate: reinspection.scheduledDate } : {}),
+      });
+    } catch (error) {
+      Alert.alert('Unable to Generate Notice', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setIsGeneratingNotice(false);
+    }
+  };
 
   return (
     <View style={styles.screen}>
@@ -388,6 +442,7 @@ export default function PlaceDetailsScreen() {
             Information and inspection records
           </Text>
         </View>
+
       </View>
 
       <ScrollView
@@ -406,25 +461,15 @@ export default function PlaceDetailsScreen() {
             setIsProfileReady(true);
           }}
         >
-          <View style={styles.placeIcon}>
-            <Ionicons
-              name={
-                isHousehold
-                  ? 'home-outline'
-                  : 'business-outline'
-              }
-              size={32}
-              color={COLORS.primary}
-            />
+          <View style={styles.placeHeaderRow}>
+            <View style={styles.placeIcon}>
+              <Ionicons name={isHousehold ? 'home-outline' : 'business-outline'} size={27} color={COLORS.primary} />
+            </View>
+            <View style={styles.placeHeadingCopy}>
+              <Text style={styles.placeName}>{place.name}</Text>
+              <Text style={styles.placeType}>{place.placeType}</Text>
+            </View>
           </View>
-
-          <Text style={styles.placeName}>
-            {place.name}
-          </Text>
-
-          <Text style={styles.placeType}>
-            {place.placeType}
-          </Text>
 
           <View style={styles.badgeRow}>
             <View style={styles.statusBadge}>
@@ -437,62 +482,53 @@ export default function PlaceDetailsScreen() {
               {riskClassification.label}
             </Text>
           </View>
-        </View>
 
-        <View
-          ref={informationRef}
-          collapsable={false}
-          onLayout={(event) => {
-            informationY.current =
-              event.nativeEvent.layout.y;
-          }}
-        >
-          <Text style={styles.sectionTitle}>
-            {isHousehold
-              ? 'Household Information'
-              : 'Place Information'}
-          </Text>
-
-          <View style={styles.infoCard}>
-            <InfoRow
-              icon="person-outline"
-              label={
-                isHousehold
-                  ? 'Household Head / Representative'
-                  : 'Owner / Representative'
-              }
-              value={place.representativeName}
-            />
-
-            <View style={styles.divider} />
-
-            <InfoRow
-              icon="location-outline"
-              label="Purok"
-              value={place.purok}
-            />
-
-            <View style={styles.divider} />
-
-            <InfoRow
-              icon="navigate-outline"
-              label="Address"
-              value={place.address}
-            />
-
-            <View style={styles.divider} />
-
-            <InfoRow
-              icon={
-                isHousehold
-                  ? 'home-outline'
-                  : 'business-outline'
-              }
-              label="Place Type"
-              value={place.placeType}
-            />
+          <View ref={informationRef} collapsable={false} style={styles.placeFacts} onLayout={(event) => { informationY.current = event.nativeEvent.layout.y; }}>
+            <PlaceFact label={isHousehold ? 'Household Representative' : 'Owner / Representative'} value={place.representativeName || 'Not recorded'} />
+            <PlaceFact label="Purok" value={formatPurok(place.purok)} />
+            <PlaceFact label="Address" value={place.address} />
+            {place.contactNumber ? <PlaceFact label="Contact" value={place.contactNumber} /> : null}
+            {place.notes ? <PlaceFact label="Notes / Remarks" value={place.notes} last /> : null}
           </View>
         </View>
+
+        {place.profileStatus === 'starter' ? (
+          <View style={styles.completionCard}>
+            <View style={styles.completionIcon}><Ionicons name="create-outline" size={24} color={COLORS.warningDark} /></View>
+            <View style={styles.completionCopy}><Text style={styles.completionTitle}>Imported record needs completion</Text><Text style={styles.completionText}>Confirm the household representative and purok during field preparation.</Text></View>
+            <Pressable accessibilityRole="button" onPress={() => router.push(`/place/edit/${place.id}` as Href)} style={({ pressed }) => [styles.completionAction, pressed && styles.pressed]}><Text style={styles.completionActionText}>Complete</Text><Ionicons name="arrow-forward" size={17} color={COLORS.warningDark} /></Pressable>
+          </View>
+        ) : null}
+
+        {place.status !== 'For Reinspection' &&
+          reinspection?.status !== 'pending' && (
+            <View
+              ref={actionRef}
+              collapsable={false}
+              style={styles.actions}
+              onLayout={(event) => {
+                actionY.current = event.nativeEvent.layout.y;
+              }}
+            >
+              <Text style={styles.sectionTitle}>Primary Action</Text>
+              <AppButton
+                title="Start Inspection"
+                onPress={() => {
+                  router.push({
+                    pathname: '/inspection/new',
+                    params: { placeId: place.id },
+                  });
+                }}
+                disabled={!isHousehold}
+              />
+
+              {!isHousehold && (
+                <Text style={styles.developmentNote}>
+                  The official inspection form for this place type is not yet available. Household inspection data will not be used for it.
+                </Text>
+              )}
+            </View>
+          )}
 
         <View
           ref={inspectionRef}
@@ -503,7 +539,7 @@ export default function PlaceDetailsScreen() {
           }}
         >
           <Text style={styles.sectionTitle}>
-            Inspection Status
+            Current Sanitation Status
           </Text>
 
           <View style={styles.infoCard}>
@@ -533,39 +569,42 @@ export default function PlaceDetailsScreen() {
                 )
               }
             />
+
+            <View style={styles.divider} />
+
+            <InfoRow
+              icon="refresh-outline"
+              label="Reinspection Status"
+              value={
+                !reinspection
+                  ? place.status === 'For Reinspection'
+                    ? 'Required · Not scheduled'
+                    : 'None pending'
+                  : reinspection.status === 'completed'
+                    ? `Completed · ${formatLocalDateTime(reinspection.completedAt)}`
+                    : isReinspectionOverdue(reinspection.scheduledDate, reinspection.status)
+                      ? `Overdue · ${formatLocalDate(reinspection.scheduledDate)}`
+                      : `Scheduled · ${formatLocalDate(reinspection.scheduledDate)}`
+              }
+            />
           </View>
         </View>
 
-        {place.status !== 'For Reinspection' &&
-          reinspection?.status !== 'pending' && (
-            <View
-              ref={actionRef}
-              collapsable={false}
-              style={styles.actions}
-              onLayout={(event) => {
-                actionY.current = event.nativeEvent.layout.y;
-              }}
-            >
-              <AppButton
-                title="Start Inspection"
-                onPress={() => {
-                  router.push({
-                    pathname: '/inspection/new',
-                    params: {
-                      placeId: place.id,
-                    },
-                  });
-                }}
-                disabled={!isHousehold}
-              />
-
-              {!isHousehold && (
-                <Text style={styles.developmentNote}>
-                  The official inspection form for this place type is not yet available. Household inspection data will not be used for it.
-                </Text>
-              )}
+        {correctiveByFinding.size > 0 ? (
+          <View style={styles.correctiveProgress}>
+            <View style={styles.correctiveProgressMark}><Ionicons name="construct-outline" size={20} color={COLORS.primary} /></View>
+            <View style={styles.correctiveProgressCopy}>
+              <Text style={styles.correctiveProgressTitle}>Corrective progress</Text>
+              <Text style={styles.correctiveProgressText}>
+                {correctiveByFinding.size} findings · {correctiveCounts.corrected} corrected · {correctiveCounts.partial} partial · {correctiveCounts.unresolved} unresolved
+              </Text>
             </View>
-          )}
+          </View>
+        ) : null}
+
+        {(place.status === 'Non-Compliant' || place.status === 'For Reinspection') && latestFailedInspection ? (
+          <AppButton title="Generate corrective notice" variant="outline" loading={isGeneratingNotice} onPress={() => void generateNotice()} />
+        ) : null}
 
         {(place.status === 'For Reinspection' || reinspection) && (
           <View>
@@ -802,6 +841,15 @@ export default function PlaceDetailsScreen() {
   );
 }
 
+function PlaceFact({ label, value, last = false }: { label: string; value: string; last?: boolean }) {
+  return (
+    <View style={[styles.placeFact, !last && styles.placeFactBorder]}>
+      <Text style={styles.placeFactLabel}>{label}</Text>
+      <Text style={styles.placeFactValue}>{value || 'Not recorded'}</Text>
+    </View>
+  );
+}
+
 type InfoRowProps = {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
@@ -1014,25 +1062,26 @@ const styles = StyleSheet.create({
   },
 
   headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
+    ...TYPOGRAPHY.heading,
     color: COLORS.text,
   },
 
   headerSubtitle: {
+    ...TYPOGRAPHY.caption,
     marginTop: 2,
-    fontSize: 12,
     color: COLORS.textSecondary,
   },
 
   content: {
+    width: '100%',
+    maxWidth: 700,
+    alignSelf: 'center',
     padding: SPACING.lg,
     paddingBottom: 40,
     gap: SPACING.lg,
   },
 
   profileCard: {
-    alignItems: 'center',
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -1040,31 +1089,33 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
   },
 
+  placeHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
+  placeHeadingCopy: { flex: 1, minWidth: 0 },
+
   placeIcon: {
-    width: 64,
-    height: 64,
+    width: 50,
+    height: 50,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 32,
+    borderRadius: RADIUS.lg,
     backgroundColor: COLORS.primarySoft,
-    marginBottom: SPACING.md,
   },
 
   placeName: {
+    ...TYPOGRAPHY.heading,
     fontSize: 21,
-    fontWeight: '700',
     color: COLORS.text,
-    textAlign: 'center',
   },
 
   placeType: {
+    ...TYPOGRAPHY.bodySmall,
     marginTop: 4,
-    fontSize: 14,
     color: COLORS.textSecondary,
   },
 
   badgeRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: SPACING.sm,
     marginTop: SPACING.md,
@@ -1078,21 +1129,21 @@ const styles = StyleSheet.create({
   },
 
   statusText: {
+    ...TYPOGRAPHY.label,
     fontSize: 12,
-    fontWeight: '700',
     color: COLORS.primary,
   },
 
   riskText: {
+    ...TYPOGRAPHY.caption,
     fontSize: 12,
-    fontWeight: '600',
     color: COLORS.textSecondary,
   },
 
   sectionTitle: {
+    ...TYPOGRAPHY.subheading,
     marginBottom: SPACING.sm,
     fontSize: 16,
-    fontWeight: '700',
     color: COLORS.text,
   },
 
@@ -1111,8 +1162,8 @@ const styles = StyleSheet.create({
   },
 
   infoRowIcon: {
-    width: 38,
-    height: 38,
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: RADIUS.md,
@@ -1236,7 +1287,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xl,
     padding: SPACING.lg,
   },
 
@@ -1249,6 +1300,21 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     marginTop: SPACING.md,
   },
+
+  placeFacts: { marginTop: SPACING.lg, borderTopWidth: 1, borderTopColor: COLORS.divider },
+  correctiveProgress: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, padding: SPACING.md, borderLeftWidth: 3, borderLeftColor: COLORS.primary, backgroundColor: COLORS.primarySoft, borderRadius: RADIUS.md },
+  correctiveProgressMark: { width: 34, height: 34, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.surface },
+  correctiveProgressCopy: { flex: 1, gap: 3 },
+  correctiveProgressTitle: { ...TYPOGRAPHY.bodyMedium, color: COLORS.text },
+  correctiveProgressText: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, lineHeight: 17 },
+  completionCard: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, padding: SPACING.md, borderRadius: RADIUS.xl, backgroundColor: COLORS.warningSoft, borderWidth: 1, borderColor: '#EBD8A7' },
+  completionIcon: { width: 44, height: 44, borderRadius: RADIUS.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.surface },
+  completionCopy: { flex: 1 }, completionTitle: { ...TYPOGRAPHY.bodyMedium, color: COLORS.text }, completionText: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, marginTop: 2 },
+  completionAction: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingVertical: SPACING.sm, paddingHorizontal: SPACING.sm }, completionActionText: { ...TYPOGRAPHY.caption, fontWeight: '800', color: COLORS.warningDark },
+  placeFact: { paddingVertical: SPACING.md },
+  placeFactBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.divider },
+  placeFactLabel: { fontSize: 11, fontWeight: '700', color: COLORS.textMuted },
+  placeFactValue: { marginTop: 3, fontSize: 14, lineHeight: 20, fontWeight: '600', color: COLORS.text },
 
   emptyHistory: {
     alignItems: 'center',
@@ -1287,7 +1353,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xl,
     padding: SPACING.md,
   },
 
@@ -1320,7 +1386,7 @@ const styles = StyleSheet.create({
   },
 
   actions: {
-    marginTop: SPACING.sm,
+    gap: SPACING.sm,
   },
 
   developmentNote: {

@@ -9,6 +9,8 @@ EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 
 Operational notices are available in SUTA's authenticated Alerts inbox. Scheduled reinspections can be added as tracked device-calendar events that SUTA updates when the schedule changes; SUTA does not use remote push delivery. Authorized inspection history uses a lightweight offline index plus a bounded recent-detail cache, while Pending and Failed fieldwork remains protected in the upload queue. See [offline storage retention](docs/offline-storage-retention.md) and [Phase 10A onboarding, alerts, and calendar reminders](docs/phase-10a-onboarding-notifications.md).
 
+Census CSV onboarding, role-aware coverage, the prioritized field queue, and the real captured-location map are documented in [Phase 11 census onboarding and field planning](docs/phase-11-census-field-planning.md).
+
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://github.com/expo/create-expo-app).
 
 ## Get started

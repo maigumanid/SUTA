@@ -15,6 +15,8 @@ import {
   PLACE_TYPES,
   type InspectionStatus,
   type Place,
+  type PlaceProfileStatus,
+  type PlaceSourceKind,
   type PlaceType,
   type RiskLevel,
 } from '@/types/place';
@@ -42,6 +44,8 @@ const RISK_LEVELS: readonly RiskLevel[] = [
   'High',
   'Unclassified',
 ];
+const PLACE_PROFILE_STATUSES: readonly PlaceProfileStatus[] = ['starter', 'complete'];
+const PLACE_SOURCE_KINDS: readonly PlaceSourceKind[] = ['manual', 'bulk_import'];
 
 function requireText(value: string, field: string) {
   const trimmed = value.trim();
@@ -113,6 +117,8 @@ export function mapSupabasePlace(row: SupabasePlaceRow): Place {
   if (!isRiskLevel(row.risk_level)) {
     throw new Error(`Unsupported risk level: ${row.risk_level}`);
   }
+  const profileStatus = PLACE_PROFILE_STATUSES.find((value) => value === row.profile_status) ?? 'complete';
+  const sourceKind = PLACE_SOURCE_KINDS.find((value) => value === row.source_kind) ?? 'manual';
 
   return {
     id: row.id,
@@ -121,11 +127,16 @@ export function mapSupabasePlace(row: SupabasePlaceRow): Place {
     createdByUid: row.created_by_uid,
     name: row.name,
     representativeName: row.representative_name,
+    contactNumber: row.contact_number ?? '',
     address: row.address,
     purok: row.purok,
+    notes: row.notes ?? '',
     placeType: row.place_type,
     status: row.status,
     riskLevel: row.risk_level,
+    profileStatus,
+    sourceKind,
+    ...(row.import_batch_id ? { importBatchId: row.import_batch_id } : {}),
     ...(row.last_inspection_date
       ? { lastInspectionDate: row.last_inspection_date }
       : {}),
@@ -143,15 +154,21 @@ export function mapPlaceToInsert(
     created_by_uid: profile.uid,
     updated_by_uid: profile.uid,
     name: requireText(place.name, 'Place name'),
-    representative_name: requireText(
-      place.representativeName,
-      'Representative name'
-    ),
+    representative_name: place.representativeName.trim(),
     address: requireText(place.address, 'Place address'),
-    purok: requireText(place.purok, 'Purok'),
+    purok: place.purok.trim(),
     place_type: place.placeType,
     status: place.status,
     risk_level: place.riskLevel,
+    ...(place.sourceKind === 'bulk_import'
+      ? {
+          contact_number: place.contactNumber.trim(),
+          notes: place.notes.trim(),
+          profile_status: place.profileStatus,
+          source_kind: place.sourceKind,
+          import_batch_id: place.importBatchId ?? null,
+        }
+      : {}),
     ...(place.lastInspectionDate
       ? { last_inspection_date: place.lastInspectionDate }
       : {}),
@@ -196,6 +213,7 @@ function mapBackendFindings(findings: BackendInspectionFinding[]) {
     id: finding.id,
     category: finding.category,
     details: finding.details,
+    ...(finding.correctiveAction ? { correctiveAction: finding.correctiveAction } : {}),
     evidence: finding.evidence.map((evidence) => ({
       id: evidence.id,
       source: evidence.source,
@@ -383,11 +401,25 @@ function mapStoredFindings(value: Json): InspectionFinding[] {
       return [];
     }
 
+    const corrective = entry.correctiveAction;
+    const correctiveAction: InspectionFinding['correctiveAction'] = corrective && typeof corrective === 'object' && !Array.isArray(corrective)
+      && typeof corrective.originalInspectionId === 'string'
+      && typeof corrective.originalFindingId === 'string'
+      && (corrective.status === 'Unresolved' || corrective.status === 'Partially Corrected' || corrective.status === 'Corrected')
+      ? {
+          originalInspectionId: corrective.originalInspectionId,
+          originalFindingId: corrective.originalFindingId,
+          status: corrective.status,
+          ...(typeof corrective.verificationNote === 'string' ? { verificationNote: corrective.verificationNote } : {}),
+        }
+      : undefined;
+
     return [
       {
         id,
         category,
         details,
+        ...(correctiveAction ? { correctiveAction } : {}),
         evidence: mapStoredEvidence(entry.evidence ?? []),
       },
     ];
