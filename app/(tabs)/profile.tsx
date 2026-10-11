@@ -85,12 +85,12 @@ function Divider() { return <View style={styles.divider} />; }
 
 const styles = StyleSheet.create({
   container: { paddingTop: SPACING.xxl, paddingBottom: SPACING.section, gap: SPACING.xl },
-  title: { ...TYPOGRAPHY.display, fontSize: 29, lineHeight: 35, color: COLORS.text },
+  title: { ...TYPOGRAPHY.display, fontSize: 29, lineHeight: 39, color: COLORS.text },
   subtitle: { ...TYPOGRAPHY.bodySmall, marginTop: SPACING.xs, color: COLORS.textSecondary },
   hero: { minHeight: 168, position: 'relative', overflow: 'hidden', flexDirection: 'row', alignItems: 'center', gap: SPACING.lg, padding: SPACING.xl, backgroundColor: COLORS.primaryDeep, borderRadius: RADIUS.xxl, ...SHADOWS.card },
   heroGlow: { position: 'absolute', width: 180, height: 180, borderRadius: 90, right: -55, top: -70, backgroundColor: 'rgba(71,184,174,0.22)' },
   heroCopy: { flex: 1, minWidth: 0, alignItems: 'flex-start' },
-  name: { ...TYPOGRAPHY.title, color: COLORS.white },
+  name: { ...TYPOGRAPHY.title, color: COLORS.textOnDark },
   rolePill: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: SPACING.md, paddingHorizontal: SPACING.sm, paddingVertical: 7, borderRadius: RADIUS.pill, backgroundColor: '#CDEBE7' },
   roleText: { ...TYPOGRAPHY.tiny, flexShrink: 1, color: COLORS.primaryDeep, fontWeight: '800' },
   detailsCard: { paddingVertical: SPACING.sm },

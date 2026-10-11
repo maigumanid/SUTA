@@ -61,6 +61,8 @@ export const COLORS = {
 
   textOnPrimary: '#FFFFFF',
   textOnDark: '#FFFFFF',
+  textOnDarkSecondary: '#D8EBE8',
+  textOnDarkMuted: '#BFD3D0',
 
   // --------------------------------------------------------------------------
   // Borders / Dividers
@@ -214,34 +216,39 @@ export const TYPOGRAPHY = {
   hero: {
     fontFamily: FONT_FAMILY.headingStrong,
     fontSize: FONT_SIZE.hero,
-    lineHeight: 44,
+    lineHeight: 48,
     letterSpacing: -1,
+    includeFontPadding: true,
   },
 
   display: {
     fontFamily: FONT_FAMILY.headingStrong,
     fontSize: FONT_SIZE.display,
-    lineHeight: 38,
+    lineHeight: 42,
     letterSpacing: -0.6,
+    includeFontPadding: true,
   },
 
   title: {
     fontFamily: FONT_FAMILY.heading,
     fontSize: FONT_SIZE.xxl,
-    lineHeight: 30,
+    lineHeight: 34,
     letterSpacing: -0.3,
+    includeFontPadding: true,
   },
 
   heading: {
     fontFamily: FONT_FAMILY.heading,
     fontSize: FONT_SIZE.xl,
-    lineHeight: 26,
+    lineHeight: 29,
+    includeFontPadding: true,
   },
 
   subheading: {
     fontFamily: FONT_FAMILY.headingMedium,
     fontSize: FONT_SIZE.lg,
-    lineHeight: 24,
+    lineHeight: 26,
+    includeFontPadding: true,
   },
 
   body: {
@@ -290,8 +297,9 @@ export const TYPOGRAPHY = {
   metric: {
     fontFamily: FONT_FAMILY.headingStrong,
     fontSize: 30,
-    lineHeight: 36,
+    lineHeight: 39,
     letterSpacing: -0.5,
+    includeFontPadding: true,
   },
 };
 

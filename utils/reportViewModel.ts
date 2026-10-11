@@ -63,10 +63,11 @@ function base(args: {
 function currentRegisterSection(rows: CurrentSanitationRow[]): ReportSection {
   return {
     title: 'Current Place Register',
-    columns: ['Place / Household', 'Purok', 'Barangay', 'Address', 'Latest Date', 'Type', 'Inspector', 'Result', 'Risk', 'Reinspection', 'Findings', 'Remarks'],
-    columnWidths: [12, 6, 9, 13, 8, 9, 9, 8, 8, 9, 4, 5],
+    columns: ['Place', 'Representative', 'Purok', 'Barangay', 'Address', 'Latest Date', 'Type', 'Inspector', 'Result', 'Risk', 'Reinspection', 'Findings', 'Remarks'],
+    columnWidths: [10, 10, 5, 8, 12, 8, 8, 8, 7, 7, 8, 4, 5],
     rows: rows.map((row) => [
       row.placeName,
+      row.representativeName.trim() || '—',
       row.purok || 'Not recorded',
       row.barangayName,
       row.address || 'Not recorded',
@@ -126,11 +127,12 @@ export function buildCurrentRegisterViewModel(args: {
 function historySection(rows: ReportInspectionRow[]): ReportSection {
   return {
     title: 'Inspection History Timeline (Oldest to Newest)',
-    columns: ['Date', 'Inspection Type', 'Inspector', 'Result', 'Risk', 'Reinspection', 'Findings', 'Remarks'],
-    columnWidths: [13, 14, 14, 12, 13, 17, 8, 9],
+    columns: ['Date', 'Inspection Type', 'Representative', 'Inspector', 'Result', 'Risk', 'Reinspection', 'Findings', 'Remarks'],
+    columnWidths: [12, 12, 15, 12, 10, 11, 14, 6, 8],
     rows: rows.map((row) => [
       formatLocalDateTime(row.inspectionDate),
       row.inspectionType,
+      row.representativeName.trim() || '—',
       row.bsiName,
       resultLabel(row.result),
       `${riskLabel(row.riskLevel)}${row.riskPercentage === null ? '' : ` (${percentage(row.riskPercentage)})`}`,

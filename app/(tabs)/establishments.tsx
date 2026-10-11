@@ -14,7 +14,6 @@ import {
 import {
   FlatList,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -24,6 +23,7 @@ import {
 import PlaceCard from '@/components/places/PlaceCard';
 import KeyboardSafeView from '@/components/common/KeyboardSafeView';
 import EmptyState from '@/components/common/EmptyState';
+import CompactFilterPanel from '@/components/common/CompactFilterPanel';
 import TourOverlay, {
   TourTarget,
 } from '@/components/onboarding/TourOverlay';
@@ -347,19 +347,13 @@ export default function EstablishmentsScreen() {
               collapsable={false}
               style={styles.filterSection}
             >
-              <Text style={styles.filterLabel}>
-                Place Type
-              </Text>
-
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={
-                  false
-                }
-                contentContainerStyle={
-                  styles.filterContainer
-                }
+              <CompactFilterPanel
+                activeCount={selectedType === 'All' ? 0 : 1}
+                summary={selectedType === 'All' ? 'All place types' : selectedType}
+                onClear={() => setSelectedType('All')}
               >
+                <Text style={styles.filterLabel}>PLACE TYPE</Text>
+                <View style={styles.filterContainer}>
                 {PLACE_TYPES.map((type) => {
                   const selected =
                     selectedType === type;
@@ -391,7 +385,8 @@ export default function EstablishmentsScreen() {
                     </Pressable>
                   );
                 })}
-              </ScrollView>
+                </View>
+              </CompactFilterPanel>
             </View>
 
             <View style={styles.resultsHeader}>
@@ -489,6 +484,7 @@ export default function EstablishmentsScreen() {
     title: {
       ...TYPOGRAPHY.display,
       fontSize: 28,
+      lineHeight: 38,
       color: COLORS.text,
     },
 
@@ -523,14 +519,14 @@ export default function EstablishmentsScreen() {
     },
 
     filterLabel: {
-      ...TYPOGRAPHY.bodyMedium,
-      marginBottom: SPACING.sm,
-      color: COLORS.text,
+      ...TYPOGRAPHY.label,
+      color: COLORS.textSecondary,
     },
 
     filterContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
       gap: SPACING.sm,
-      paddingRight: SPACING.lg,
     },
 
     filterChip: {

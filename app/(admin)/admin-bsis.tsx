@@ -6,6 +6,7 @@ import AdminPage, { adminStyles } from '@/components/admin/AdminPage';
 import InitialsAvatar from '@/components/admin/InitialsAvatar';
 import OptionSelector from '@/components/admin/OptionSelector';
 import AppButton from '@/components/common/AppButton';
+import CompactFilterPanel from '@/components/common/CompactFilterPanel';
 import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { fetchAdminBsis, fetchBarangays } from '@/services/adminService';
 import type { AdminBsiSummary, BarangayOption } from '@/types/admin';
@@ -51,14 +52,28 @@ export default function AdminBsisScreen() {
       return left.name.localeCompare(right.name);
     });
   }, [barangayId, items, query, sort, status]);
+  const activeFilterCount = Number(status !== 'all') + Number(barangayId !== 'all') + Number(sort !== 'name');
+  const activeFilterSummary = [
+    status !== 'all' ? `${status.charAt(0).toUpperCase()}${status.slice(1)}` : null,
+    barangayId !== 'all' ? barangays.find((item) => item.id === barangayId)?.name : null,
+    sort !== 'name' ? (sort === 'recent' ? 'Recent activity first' : 'Sorted by barangay') : null,
+  ].filter(Boolean).join(' · ');
 
   return (
     <AdminPage title="BSI Accounts" subtitle="Provision and manage authorized inspectors" refreshing={loading} onRefresh={() => void load()}>
       <AppButton title="Add BSI" onPress={() => router.push('/admin/bsi/new')} />
       <TextInput style={styles.search} placeholder="Search name, email, or barangay" placeholderTextColor={COLORS.textMuted} value={query} onChangeText={setQuery} />
-      <View style={styles.filters}>{(['all', 'active', 'inactive'] as const).map((value) => <Pressable key={value} style={[styles.chip, status === value && styles.chipActive]} onPress={() => setStatus(value)}><Text style={[styles.chipText, status === value && styles.chipTextActive]}>{value.charAt(0).toUpperCase() + value.slice(1)}</Text></Pressable>)}</View>
-      <OptionSelector label="BARANGAY" value={barangayId} options={[{ value: 'all', label: 'All barangays' }, ...barangays.map((item) => ({ value: item.id, label: item.name }))]} onChange={setBarangayId} />
-      <View style={styles.filters}>{(['name', 'barangay', 'recent'] as const).map((value) => <Pressable key={value} style={[styles.chip, sort === value && styles.chipActive]} onPress={() => setSort(value)}><Text style={[styles.chipText, sort === value && styles.chipTextActive]}>{value === 'recent' ? 'Recent Activity' : value.charAt(0).toUpperCase() + value.slice(1)}</Text></Pressable>)}</View>
+      <CompactFilterPanel
+        activeCount={activeFilterCount}
+        summary={activeFilterSummary}
+        onClear={() => { setStatus('all'); setBarangayId('all'); setSort('name'); }}
+      >
+        <Text style={styles.filterLabel}>STATUS</Text>
+        <View style={styles.filters}>{(['all', 'active', 'inactive'] as const).map((value) => <Pressable key={value} style={[styles.chip, status === value && styles.chipActive]} onPress={() => setStatus(value)}><Text style={[styles.chipText, status === value && styles.chipTextActive]}>{value.charAt(0).toUpperCase() + value.slice(1)}</Text></Pressable>)}</View>
+        <OptionSelector label="BARANGAY" value={barangayId} options={[{ value: 'all', label: 'All barangays' }, ...barangays.map((item) => ({ value: item.id, label: item.name }))]} onChange={setBarangayId} />
+        <Text style={styles.filterLabel}>SORT BY</Text>
+        <View style={styles.filters}>{(['name', 'barangay', 'recent'] as const).map((value) => <Pressable key={value} style={[styles.chip, sort === value && styles.chipActive]} onPress={() => setSort(value)}><Text style={[styles.chipText, sort === value && styles.chipTextActive]}>{value === 'recent' ? 'Recent Activity' : value.charAt(0).toUpperCase() + value.slice(1)}</Text></Pressable>)}</View>
+      </CompactFilterPanel>
       {error ? <Text style={adminStyles.error}>{error}</Text> : null}
       {!loading && filtered.length === 0 ? <Text style={adminStyles.empty}>No BSI accounts found.</Text> : null}
       {filtered.map((item) => (
@@ -84,6 +99,7 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
   chipText: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary },
   chipTextActive: { color: COLORS.white },
+  filterLabel: { ...TYPOGRAPHY.label, color: COLORS.textSecondary },
   accountCard: { flexDirection: 'row', alignItems: 'flex-start' },
   accountBody: { flex: 1 },
 });

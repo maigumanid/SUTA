@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import AdminPage, { adminStyles } from '@/components/admin/AdminPage';
 import EmptyState from '@/components/common/EmptyState';
+import CompactFilterPanel from '@/components/common/CompactFilterPanel';
 import OptionSelector from '@/components/admin/OptionSelector';
 import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { fetchAdminBsis, fetchAdminInspections, fetchBarangays } from '@/services/adminService';
@@ -78,15 +79,37 @@ export default function AdminInspectionsScreen() {
       (params.reinspection !== 'pending' || item.reinspectionStatus === 'pending') &&
       (!needle || `${item.placeName} ${item.barangayName} ${item.bsiName}`.toLowerCase().includes(needle));
   }), [barangayId, bsiId, filter, inspectionType, items, params.reinspection, period, query]);
+  const activeFilterCount = Number(filter !== 'all') + Number(barangayId !== 'all') + Number(bsiId !== 'all') + Number(inspectionType !== 'all') + Number(period !== 'all') + Number(params.reinspection === 'pending');
+  const activeFilterSummary = [
+    filter !== 'all' ? resultLabel(filter) : null,
+    barangayId !== 'all' ? barangayOptions.find((item) => item.value === barangayId)?.label : null,
+    bsiId !== 'all' ? bsiOptions.find((item) => item.value === bsiId)?.label : null,
+    inspectionType !== 'all' ? (inspectionType === 'reinspection' ? 'Reinspections' : 'Inspections') : null,
+    period === 'this_month' ? 'This month' : null,
+    params.reinspection === 'pending' ? 'Pending reinspection' : null,
+  ].filter(Boolean).join(' · ');
+  const clearFilters = () => {
+    setFilter('all');
+    setBarangayId('all');
+    setBsiId('all');
+    setInspectionType('all');
+    setPeriod('all');
+    if (params.reinspection) router.setParams({ reinspection: undefined });
+  };
 
   return (
     <AdminPage title="Inspection Oversight" subtitle="Read-only records across all barangays" refreshing={loading} onRefresh={() => void load()}>
       <TextInput style={styles.search} placeholder="Search place, barangay, or BSI" placeholderTextColor={COLORS.textMuted} value={query} onChangeText={setQuery} />
-      <View style={styles.filters}>{filters.map((value) => <Pressable key={value} style={[styles.chip, filter === value && styles.chipActive]} onPress={() => setFilter(value)}><Text style={[styles.chipText, filter === value && styles.chipTextActive]}>{value === 'all' ? 'All' : resultLabel(value)}</Text></Pressable>)}</View>
-      <OptionSelector label="BARANGAY" value={barangayId} options={[{ value: 'all', label: 'All barangays' }, ...barangayOptions]} onChange={setBarangayId} />
-      <OptionSelector label="INSPECTOR" value={bsiId} options={[{ value: 'all', label: 'All BSIs' }, ...bsiOptions]} onChange={setBsiId} />
-      <View style={styles.filters}>{(['all', 'inspection', 'reinspection'] as const).map((value) => <Pressable key={value} style={[styles.chip, inspectionType === value && styles.chipActive]} onPress={() => setInspectionType(value)}><Text style={[styles.chipText, inspectionType === value && styles.chipTextActive]}>{value === 'all' ? 'All types' : value === 'reinspection' ? 'Reinspection' : 'Inspection'}</Text></Pressable>)}</View>
-      <View style={styles.filters}>{(['all', 'this_month'] as const).map((value) => <Pressable key={value} style={[styles.chip, period === value && styles.chipActive]} onPress={() => setPeriod(value)}><Text style={[styles.chipText, period === value && styles.chipTextActive]}>{value === 'all' ? 'All dates' : 'This month'}</Text></Pressable>)}</View>
+      <CompactFilterPanel activeCount={activeFilterCount} summary={activeFilterSummary} onClear={clearFilters}>
+        <Text style={styles.filterLabel}>RESULT</Text>
+        <View style={styles.filters}>{filters.map((value) => <Pressable key={value} style={[styles.chip, filter === value && styles.chipActive]} onPress={() => setFilter(value)}><Text style={[styles.chipText, filter === value && styles.chipTextActive]}>{value === 'all' ? 'All' : resultLabel(value)}</Text></Pressable>)}</View>
+        <OptionSelector label="BARANGAY" value={barangayId} options={[{ value: 'all', label: 'All barangays' }, ...barangayOptions]} onChange={setBarangayId} />
+        <OptionSelector label="INSPECTOR" value={bsiId} options={[{ value: 'all', label: 'All BSIs' }, ...bsiOptions]} onChange={setBsiId} />
+        <Text style={styles.filterLabel}>INSPECTION TYPE</Text>
+        <View style={styles.filters}>{(['all', 'inspection', 'reinspection'] as const).map((value) => <Pressable key={value} style={[styles.chip, inspectionType === value && styles.chipActive]} onPress={() => setInspectionType(value)}><Text style={[styles.chipText, inspectionType === value && styles.chipTextActive]}>{value === 'all' ? 'All types' : value === 'reinspection' ? 'Reinspection' : 'Inspection'}</Text></Pressable>)}</View>
+        <Text style={styles.filterLabel}>DATE</Text>
+        <View style={styles.filters}>{(['all', 'this_month'] as const).map((value) => <Pressable key={value} style={[styles.chip, period === value && styles.chipActive]} onPress={() => setPeriod(value)}><Text style={[styles.chipText, period === value && styles.chipTextActive]}>{value === 'all' ? 'All dates' : 'This month'}</Text></Pressable>)}</View>
+      </CompactFilterPanel>
       {error ? <Text style={adminStyles.error}>{error}</Text> : null}
       {!loading && visible.length === 0 ? <EmptyState icon="clipboard-outline" title="No inspections found" description="Try adjusting the current search or filters." compact /> : null}
       {visible.map((item) => <Pressable key={item.id} style={adminStyles.card} onPress={() => router.push({ pathname: '/admin/inspection/[id]', params: { id: item.id } })}>
@@ -108,4 +131,5 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
   chipText: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary },
   chipTextActive: { color: COLORS.white },
+  filterLabel: { ...TYPOGRAPHY.label, color: COLORS.textSecondary },
 });

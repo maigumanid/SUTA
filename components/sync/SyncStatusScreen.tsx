@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 
 import AppButton from '@/components/common/AppButton';
+import CompactFilterPanel from '@/components/common/CompactFilterPanel';
 import EmptyState from '@/components/common/EmptyState';
 import {
   COLORS,
@@ -376,11 +377,12 @@ export function SyncStatusScreen({ tabMode = false }: { tabMode?: boolean }) {
             </Text>
           </View>
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filters}
+          <CompactFilterPanel
+            activeCount={filter === 'all' ? 0 : 1}
+            summary={FILTERS.find((item) => item.value === filter)?.label ?? 'All'}
+            onClear={() => setFilter('all')}
           >
+          <View style={styles.filters}>
             {FILTERS.map((item) => {
               const selected = filter === item.value;
               return (
@@ -406,7 +408,8 @@ export function SyncStatusScreen({ tabMode = false }: { tabMode?: boolean }) {
                 </Pressable>
               );
             })}
-          </ScrollView>
+          </View>
+          </CompactFilterPanel>
 
           {visibleInspections.length === 0 ? (
             <EmptyState
@@ -814,7 +817,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
     backgroundColor: COLORS.background,
   },
-  tabTitle: { ...TYPOGRAPHY.display, fontSize: 29, lineHeight: 35, color: COLORS.text },
+  tabTitle: { ...TYPOGRAPHY.display, fontSize: 29, lineHeight: 39, color: COLORS.text },
   tabSubtitle: { ...TYPOGRAPHY.bodySmall, marginTop: 5, color: COLORS.textSecondary },
   diagnosticButton: { paddingVertical: SPACING.sm, alignSelf: 'flex-start' },
   diagnosticLink: { fontSize: 12, fontWeight: '600', color: COLORS.primary },
@@ -952,8 +955,9 @@ const styles = StyleSheet.create({
   connectionValue: { fontSize: 13, fontWeight: '700', color: COLORS.text },
 
   filters: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: SPACING.sm,
-    paddingRight: SPACING.lg,
   },
 
   filterChip: {

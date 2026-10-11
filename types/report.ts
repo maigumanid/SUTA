@@ -45,6 +45,7 @@ export type CurrentInspectionType = 'Initial Inspection' | 'Inspection' | 'Reins
 export type CurrentSanitationRow = {
   placeId: string;
   placeName: string;
+  representativeName: string;
   placeType: string;
   address: string;
   purok: string;
@@ -68,6 +69,7 @@ export type ReportInspectionRow = {
   id: string;
   placeId: string;
   placeName: string;
+  representativeName: string;
   placeType: string;
   address: string;
   purok: string;

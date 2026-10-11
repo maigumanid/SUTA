@@ -228,6 +228,7 @@ async function hydrateCurrentPlaces(places: PlaceRow[]): Promise<CurrentSanitati
     return {
       placeId: place.id,
       placeName: place.name,
+      representativeName: place.representative_name,
       placeType: place.place_type,
       address: place.address,
       purok: place.purok,
@@ -291,6 +292,7 @@ async function classifyHistoryRows(records: InspectionRow[], place: PlaceRow): P
       id: item.id,
       placeId: item.place_id,
       placeName: place.name,
+      representativeName: place.representative_name,
       placeType: place.place_type,
       address: place.address,
       purok: place.purok,

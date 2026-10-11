@@ -58,7 +58,7 @@ const styles = StyleSheet.create({
   header: { flex: 1, minWidth: 0, marginBottom: SPACING.sm },
   headerRow: { width: '100%', flexDirection: 'row', alignItems: 'flex-start', gap: SPACING.md },
   headerAction: { flexShrink: 0, paddingRight: SPACING.xs },
-  title: { ...TYPOGRAPHY.display, fontSize: 29, lineHeight: 35, color: COLORS.text },
+  title: { ...TYPOGRAPHY.display, fontSize: 29, lineHeight: 39, color: COLORS.text },
   subtitle: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, marginTop: SPACING.xs },
   offlineCard: { padding: SPACING.lg, gap: SPACING.sm, backgroundColor: COLORS.offlineSoft, borderRadius: RADIUS.xl, borderWidth: 1, borderColor: COLORS.border },
   offlineTitle: { ...TYPOGRAPHY.subheading, color: COLORS.offline },

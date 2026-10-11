@@ -15,10 +15,18 @@ export default function AdminProfileScreen() {
   const { profile, signOut } = useAuth();
   const [loading, setLoading] = useState(false);
   const logout = async () => {
+    if (loading) return;
     setLoading(true);
     try { await signOut(); router.replace('/login'); }
     catch (error) { Alert.alert('Unable to Sign Out', error instanceof Error ? error.message : 'Please try again.'); }
     finally { setLoading(false); }
+  };
+  const confirmLogout = () => {
+    if (loading) return;
+    Alert.alert('Log Out', 'Do you want to end this session?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Log Out', style: 'destructive', onPress: () => void logout() },
+    ]);
   };
   return (
     <AdminPage title="Profile" subtitle="Authorized sanitation administrator" allowOfflineContent>
@@ -49,7 +57,7 @@ export default function AdminProfileScreen() {
       <View style={styles.actions}>
         <AppButton title="Edit Profile" onPress={() => router.push('/edit-profile')} />
         <AppButton title="Replay App Guide" variant="secondary" onPress={() => router.push({ pathname: '/onboarding', params: { replay: 'true' } })} />
-        <AppButton title="Sign Out" variant="outline" loading={loading} onPress={() => void logout()} />
+        <AppButton title="Log Out" variant="outline" loading={loading} onPress={confirmLogout} />
       </View>
     </AdminPage>
   );
@@ -63,7 +71,7 @@ const styles = StyleSheet.create({
   hero: { minHeight: 168, position: 'relative', overflow: 'hidden', flexDirection: 'row', alignItems: 'center', gap: SPACING.lg, padding: SPACING.xl, backgroundColor: COLORS.primaryDeep, borderRadius: RADIUS.xxl, ...SHADOWS.card },
   heroGlow: { position: 'absolute', width: 180, height: 180, borderRadius: 90, right: -55, top: -70, backgroundColor: 'rgba(71,184,174,0.22)' },
   identityText: { flex: 1, minWidth: 0, alignItems: 'flex-start' },
-  name: { ...TYPOGRAPHY.title, color: COLORS.white },
+  name: { ...TYPOGRAPHY.title, color: COLORS.textOnDark },
   rolePill: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: SPACING.md, paddingHorizontal: SPACING.sm, paddingVertical: 7, borderRadius: RADIUS.pill, backgroundColor: '#CDEBE7' },
   roleText: { ...TYPOGRAPHY.tiny, flexShrink: 1, color: COLORS.primaryDeep, fontWeight: '800' },
   detailsCard: { paddingVertical: SPACING.sm },

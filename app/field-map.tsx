@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 
 import OptionSelector from '@/components/admin/OptionSelector';
+import CompactFilterPanel from '@/components/common/CompactFilterPanel';
 import CoverageMap from '@/components/planning/CoverageMap';
 import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
 import { useAuth } from '@/context/AuthContext';
@@ -233,8 +234,6 @@ export default function FieldMapScreen() {
       <View style={styles.flex}><Text style={styles.title}>Field map</Text><Text style={styles.subtitle}>Shows real inspection-captured locations only.</Text></View>
     </View>
 
-    {isAdmin ? <View style={styles.scope}><OptionSelector label="MAP SCOPE" value={barangayId} options={[{ value: 'all', label: 'All barangays' }, ...barangays.map((item) => ({ value: item.id, label: item.name }))]} onChange={setBarangayId} loading={loading && barangays.length === 0} /></View> : null}
-
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
       {STATUS_FILTERS.map((filter) => {
         const selected = statusFilter === filter.value;
@@ -251,21 +250,23 @@ export default function FieldMapScreen() {
       })}
     </ScrollView>
 
-    {purokOptions.length > 0 ? (
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.purokRow}>
-        <Text style={styles.purokLabel}>Purok</Text>
-        {[{ value: 'all', label: 'All' }, ...purokOptions].map((option) => {
-          const selected = purokFilter === option.value;
-          return <Pressable
-            key={option.value}
-            accessibilityRole="button"
-            accessibilityState={{ selected }}
-            onPress={() => setPurokFilter(option.value)}
-            style={({ pressed }) => [styles.purokChip, selected && styles.purokChipSelected, pressed && styles.pressed]}
-          ><Text style={[styles.purokChipText, selected && styles.purokChipTextSelected]}>{selected ? '✓ ' : ''}{option.label}</Text></Pressable>;
-        })}
-      </ScrollView>
-    ) : null}
+    {isAdmin || purokOptions.length > 0 ? <View style={styles.areaFilters}><CompactFilterPanel
+      activeCount={Number(isAdmin && barangayId !== 'all') + Number(purokFilter !== 'all')}
+      summary={[
+        isAdmin && barangayId !== 'all' ? barangays.find((item) => item.id === barangayId)?.name : null,
+        purokFilter !== 'all' ? purokOptions.find((item) => item.value === purokFilter)?.label : null,
+      ].filter(Boolean).join(' · ') || 'All areas'}
+      onClear={() => { if (isAdmin) setBarangayId('all'); setPurokFilter('all'); }}
+    >
+      {isAdmin ? <OptionSelector label="MAP SCOPE" value={barangayId} options={[{ value: 'all', label: 'All barangays' }, ...barangays.map((item) => ({ value: item.id, label: item.name }))]} onChange={setBarangayId} loading={loading && barangays.length === 0} /> : null}
+      {purokOptions.length > 0 ? <View style={styles.purokRow}>
+          <Text style={styles.purokLabel}>PUROK</Text>
+          {[{ value: 'all', label: 'All' }, ...purokOptions].map((option) => {
+            const selected = purokFilter === option.value;
+            return <Pressable key={option.value} accessibilityRole="button" accessibilityState={{ selected }} onPress={() => setPurokFilter(option.value)} style={({ pressed }) => [styles.purokChip, selected && styles.purokChipSelected, pressed && styles.pressed]}><Text style={[styles.purokChipText, selected && styles.purokChipTextSelected]}>{selected ? '✓ ' : ''}{option.label}</Text></Pressable>;
+          })}
+      </View> : null}
+    </CompactFilterPanel></View> : null}
 
     <View style={styles.locationTools}>
       <Pressable
@@ -420,14 +421,14 @@ const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   title: { ...TYPOGRAPHY.display, color: COLORS.text },
   subtitle: { ...TYPOGRAPHY.bodySmall, color: COLORS.textSecondary, marginTop: 2 },
-  scope: { marginBottom: SPACING.md },
   filterRow: { gap: SPACING.sm, paddingBottom: SPACING.sm },
   filterChip: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, paddingHorizontal: SPACING.md, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface },
   filterChipSelected: { borderColor: COLORS.primary, backgroundColor: COLORS.primary },
   filterChipText: { ...TYPOGRAPHY.caption, fontWeight: '700', color: COLORS.textSecondary },
   filterChipTextSelected: { color: COLORS.textOnPrimary },
-  purokRow: { minHeight: 36, alignItems: 'center', gap: SPACING.xs, paddingBottom: SPACING.md },
-  purokLabel: { ...TYPOGRAPHY.tiny, fontWeight: '800', color: COLORS.textMuted, marginRight: SPACING.xs },
+  areaFilters: { marginBottom: SPACING.sm },
+  purokRow: { minHeight: 36, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: SPACING.xs },
+  purokLabel: { width: '100%', ...TYPOGRAPHY.label, color: COLORS.textMuted },
   purokChip: { minHeight: 40, justifyContent: 'center', paddingHorizontal: SPACING.sm, borderRadius: RADIUS.pill, backgroundColor: COLORS.surfaceMuted },
   purokChipSelected: { backgroundColor: COLORS.primarySoft, borderWidth: 1, borderColor: COLORS.primary },
   purokChipText: { ...TYPOGRAPHY.tiny, fontWeight: '700', color: COLORS.textSecondary },

@@ -118,7 +118,7 @@ export function buildWideReportMatrix(report: ReportViewModel, records: Inspecti
       ? [
         String(index + 1),
         record?.placeName ?? source.placeName,
-        record?.representativeName?.trim() || '—',
+        source.representativeName.trim() || record?.representativeName?.trim() || '—',
         record?.purok ?? source.purok,
         record?.address ?? source.address,
         formatLocalDateTime(record?.inspectionDate ?? source.inspectionDate),
@@ -128,7 +128,7 @@ export function buildWideReportMatrix(report: ReportViewModel, records: Inspecti
       : [
         String(index + 1),
         record?.placeName ?? source.placeName,
-        record?.representativeName?.trim() || '—',
+        source.representativeName.trim() || record?.representativeName?.trim() || '—',
         record?.purok ?? source.purok,
         record?.address ?? source.address,
         ...(report.generatedBy === 'admin' && !hasSingleAdminScope(report, 'Barangay') ? [record?.barangayName ?? source.barangayName] : []),

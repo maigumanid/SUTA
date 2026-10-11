@@ -2,11 +2,12 @@ import DateTimePicker, { type DateTimePickerEvent } from '@react-native-communit
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, usePathname } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import AdminPage, { adminStyles } from '@/components/admin/AdminPage';
 import OptionSelector from '@/components/admin/OptionSelector';
 import AppButton from '@/components/common/AppButton';
+import CompactFilterPanel from '@/components/common/CompactFilterPanel';
 import ScreenContainer from '@/components/common/ScreenContainer';
 import ReportPreview from '@/components/reports/ReportPreview';
 import { COLORS, RADIUS, SHADOWS, SPACING, TYPOGRAPHY } from '@/constants/theme';
@@ -63,6 +64,12 @@ function DateFilter({ label, value, onChange }: { label: string; value?: string;
   return <View style={styles.dateField}><Text style={styles.label}>{label}</Text><View style={styles.dateRow}><Pressable style={styles.dateButton} onPress={() => setOpen(true)}><Text style={value ? styles.value : styles.placeholder}>{value ? formatLocalDate(value) : 'All time'}</Text><Ionicons name="calendar-outline" size={20} color={COLORS.primary} /></Pressable>{value ? <Pressable accessibilityLabel={`Clear ${label}`} onPress={() => onChange(undefined)}><Ionicons name="close-circle" size={25} color={COLORS.textMuted} /></Pressable> : null}</View>{open ? <DateTimePicker value={value ? new Date(`${value}T00:00:00`) : new Date()} mode="date" onChange={select} /> : null}</View>;
 }
 
+function PaginationButton({ title, disabled, loading, onPress }: { title: string; disabled: boolean; loading: boolean; onPress: () => void }) {
+  return <Pressable accessibilityRole="button" accessibilityState={{ disabled, busy: loading }} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.pageButton, disabled && styles.pageButtonDisabled, pressed && !disabled && styles.pressed]}>
+    {loading ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Text style={[styles.pageButtonText, disabled && styles.pageButtonTextDisabled]}>{title}</Text>}
+  </Pressable>;
+}
+
 export default function OperationalReportsScreen({ role }: { role: 'admin' | 'bsi' }) {
   const isAdmin = role === 'admin';
   const pathname = usePathname();
@@ -78,6 +85,7 @@ export default function OperationalReportsScreen({ role }: { role: 'admin' | 'bs
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [loadingPage, setLoadingPage] = useState<'previous' | 'next' | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportingCsv, setExportingCsv] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -251,6 +259,14 @@ export default function OperationalReportsScreen({ role }: { role: 'admin' | 'bs
     setError(null);
     setFilters((current) => ({ ...DEFAULT_REPORT_FILTERS, barangayId: current.barangayId, startDate: current.startDate, endDate: current.endDate }));
   };
+  const clearFilters = () => {
+    setFilters(DEFAULT_REPORT_FILTERS);
+    setIncludePhotoEvidence(false);
+    setReport(null);
+    setPage(0);
+    setTotal(0);
+    setError(null);
+  };
   const exportPdf = async () => {
     setExporting(true);
     try { await shareReportPdf(await buildReport(0, true)); }
@@ -268,7 +284,34 @@ export default function OperationalReportsScreen({ role }: { role: 'admin' | 'bs
     finally { setExportingCsv(false); }
   };
   const switchToRegister = () => { setKind('current_register'); setReport(null); setPage(0); };
+  const loadReportPage = async (nextPage: number, direction: 'previous' | 'next') => {
+    setLoadingPage(direction);
+    try { await loadPreview(nextPage); }
+    finally { setLoadingPage(null); }
+  };
   const paginated = kind !== 'municipal_summary';
+  const activeFilterCount = Number(isAdmin && filters.barangayId !== 'all')
+    + Number(filters.purok !== 'all')
+    + Number(kind === 'place_history' && filters.placeId !== 'all')
+    + Number(isAdmin && kind !== 'place_history' && filters.bsiId !== 'all')
+    + Number(kind !== 'place_history' && filters.result !== 'all')
+    + Number(kind !== 'place_history' && filters.riskLevel !== 'all')
+    + Number(kind !== 'place_history' && filters.reinspectionStatus !== 'all')
+    + Number(kind !== 'place_history' && filters.placeType !== 'all')
+    + Number(kind === 'place_history' && filters.inspectionType !== 'all')
+    + Number(Boolean(filters.startDate))
+    + Number(Boolean(filters.endDate))
+    + Number(includePhotoEvidence);
+  const filterSummary = [
+    !isAdmin ? assignedBarangayName : null,
+    isAdmin && filters.barangayId !== 'all' ? labels.barangay : null,
+    filters.purok !== 'all' ? filters.purok : null,
+    kind === 'place_history' && filters.placeId !== 'all' ? labels.place : null,
+    filters.result !== 'all' ? (filters.result === 'non_compliant' ? 'Non-Compliant' : 'Compliant') : null,
+    filters.riskLevel !== 'all' ? riskLabel(filters.riskLevel) : null,
+    filters.startDate || filters.endDate ? 'Date range' : null,
+    includePhotoEvidence ? 'Photo appendix' : null,
+  ].filter(Boolean).slice(0, 3).join(' · ');
   const content = <>
     {isOnline === false ? <View style={styles.offline}><Ionicons name="cloud-offline-outline" size={20} color={COLORS.offline} /><Text style={styles.offlineText}>Reports require connectivity.</Text></View> : null}
     <Text style={isAdmin ? adminStyles.sectionTitle : styles.heading}>Report Mode</Text>
@@ -282,10 +325,10 @@ export default function OperationalReportsScreen({ role }: { role: 'admin' | 'bs
       </Pressable>;
     })}</View>
     <Text style={isAdmin ? adminStyles.sectionTitle : styles.heading}>Report Filters</Text>
-    <Text style={styles.body}>Choose the scope and records to include.</Text>
+    <CompactFilterPanel activeCount={activeFilterCount} summary={filterSummary} onClear={clearFilters}>
     {isAdmin ? <OptionSelector label="BARANGAY" value={filters.barangayId} options={[{ value: 'all', label: 'Municipality-wide' }, ...barangays.map((item) => ({ value: item.id, label: item.name }))]} onChange={(value) => update('barangayId', value)} /> : <View style={styles.fixedScope}><Text style={styles.label}>BARANGAY</Text><Text style={styles.value}>{assignedBarangayName}</Text></View>}
     <OptionSelector label="PUROK" value={filters.purok} options={[{ value: 'all', label: 'All puroks' }, ...puroks.map((value) => ({ value, label: value }))]} onChange={(value) => update('purok', value)} />
-    {kind === 'place_history' ? <OptionSelector label="PLACE / HOUSEHOLD" value={filters.placeId} options={[{ value: 'all', label: 'Select a place or household' }, ...places.map((item) => ({ value: item.id, label: `${item.name} · ${item.purok}` }))]} onChange={(value) => update('placeId', value)} /> : null}
+    {kind === 'place_history' ? <OptionSelector label="PLACE" value={filters.placeId} options={[{ value: 'all', label: 'Select a place' }, ...places.map((item) => ({ value: item.id, label: `${item.name} · ${item.purok}` }))]} onChange={(value) => update('placeId', value)} /> : null}
     {isAdmin && kind !== 'place_history' ? <OptionSelector label="INSPECTOR / BSI" value={filters.bsiId} options={[{ value: 'all', label: 'All BSIs' }, ...inspectors.map((item) => ({ value: item.id, label: item.name }))]} onChange={(value) => update('bsiId', value)} /> : null}
     {kind !== 'place_history' ? <>
       <OptionSelector label="STATUS" value={filters.result} options={[{ value: 'all', label: 'All statuses' }, { value: 'compliant', label: 'Compliant' }, { value: 'non_compliant', label: 'Non-Compliant' }]} onChange={(value) => update('result', value)} />
@@ -294,11 +337,12 @@ export default function OperationalReportsScreen({ role }: { role: 'admin' | 'bs
       <OptionSelector label="PLACE TYPE" value={filters.placeType} options={[{ value: 'all', label: 'All place types' }, ...PLACE_TYPES.map((value) => ({ value, label: value }))]} onChange={(value) => update('placeType', value)} />
     </> : <OptionSelector label="INSPECTION TYPE" value={filters.inspectionType} options={[{ value: 'all', label: 'All inspections and reinspections' }, { value: 'inspection', label: 'Initial and regular inspections' }, { value: 'reinspection', label: 'Reinspections' }]} onChange={(value) => update('inspectionType', value)} />}
     <View style={styles.dateFilters}><DateFilter label="FROM" value={filters.startDate} onChange={(value) => update('startDate', value)} /><DateFilter label="TO" value={filters.endDate} onChange={(value) => update('endDate', value)} /></View>
-    {kind !== 'municipal_summary' ? <View style={styles.optionToggle}><View style={styles.optionText}><Text style={styles.label}>INCLUDE PHOTO EVIDENCE</Text><Text style={styles.body}>Off by default. Full checklist, findings, remarks, and result/risk details are always included.</Text></View><Switch value={includePhotoEvidence} onValueChange={setIncludePhotoEvidence} trackColor={{ false: COLORS.border, true: COLORS.primaryLight }} thumbColor={includePhotoEvidence ? COLORS.primary : COLORS.surface} /></View> : null}
+    {kind !== 'municipal_summary' ? <View style={styles.optionToggle}><View style={styles.optionText}><Text style={styles.label}>INCLUDE PHOTO EVIDENCE</Text><Text style={styles.body}>Adds the photo appendix to the complete PDF.</Text></View><Switch value={includePhotoEvidence} onValueChange={setIncludePhotoEvidence} trackColor={{ false: COLORS.border, true: COLORS.primaryLight }} thumbColor={includePhotoEvidence ? COLORS.primary : COLORS.surface} /></View> : null}
+    </CompactFilterPanel>
     <AppButton title="Preview Report" loading={loading} onPress={() => void loadPreview(0)} />
     {error ? <Text style={isAdmin ? adminStyles.error : styles.error}>{error}</Text> : null}
     {report ? <><Text style={isAdmin ? adminStyles.sectionTitle : styles.heading}>Report Preview</Text><ReportPreview report={report} onOpen={(link) => router.push({ pathname: isAdmin ? '/admin/inspection/[id]' : '/inspection/[id]', params: { id: link.id } })} />
-      {paginated ? <View style={styles.pagination}><AppButton title="Previous" variant="outline" disabled={page === 0 || loading} onPress={() => void loadPreview(page - 1)} /><Text style={styles.body}>Page {page + 1} · {total.toLocaleString()} matching {kind === 'current_register' ? 'places' : 'records'}</Text><AppButton title="Next" variant="outline" disabled={(page + 1) * PREVIEW_SIZE >= total || loading} onPress={() => void loadPreview(page + 1)} /></View> : <AppButton title="Open Current Register Drilldown" variant="outline" onPress={switchToRegister} />}
+      {paginated ? <View style={styles.pagination}><PaginationButton title="Previous" disabled={page === 0 || loading} loading={loadingPage === 'previous'} onPress={() => void loadReportPage(page - 1, 'previous')} /><Text numberOfLines={2} style={styles.pageStatus}>Page {page + 1}{'\n'}{total.toLocaleString()} {kind === 'current_register' ? 'places' : 'records'}</Text><PaginationButton title="Next" disabled={(page + 1) * PREVIEW_SIZE >= total || loading} loading={loadingPage === 'next'} onPress={() => void loadReportPage(page + 1, 'next')} /></View> : <AppButton title="Open Current Register Drilldown" variant="outline" onPress={switchToRegister} />}
       <View style={styles.exportActions}>
         <AppButton title="Export Complete PDF" loading={exporting} onPress={() => void exportPdf()} style={styles.exportAction} />
         <AppButton title="Export CSV" variant="outline" loading={exportingCsv} onPress={() => void exportCsv()} style={styles.exportAction} />
@@ -313,7 +357,7 @@ export default function OperationalReportsScreen({ role }: { role: 'admin' | 'bs
 const styles = StyleSheet.create({
   content: { paddingTop: SPACING.xxl, paddingBottom: SPACING.section, gap: SPACING.xl },
   header: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
-  title: { ...TYPOGRAPHY.display, fontSize: 29, lineHeight: 35, color: COLORS.text },
+  title: { ...TYPOGRAPHY.display, fontSize: 29, lineHeight: 39, color: COLORS.text },
   subtitle: { ...TYPOGRAPHY.bodySmall, color: COLORS.textSecondary },
   heading: { ...TYPOGRAPHY.heading, color: COLORS.text },
   catalog: { overflow: 'hidden', borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.xl, backgroundColor: COLORS.surface },
@@ -337,9 +381,14 @@ const styles = StyleSheet.create({
   offline: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, padding: SPACING.md, borderRadius: RADIUS.lg, backgroundColor: COLORS.offlineSoft },
   offlineText: { ...TYPOGRAPHY.body, color: COLORS.offline },
   error: { ...TYPOGRAPHY.body, color: COLORS.violation },
-  pagination: { gap: SPACING.sm, alignItems: 'center' },
-  exportActions: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
-  exportAction: { flexGrow: 1, minWidth: 150 },
+  pagination: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACING.sm },
+  pageButton: { width: 92, height: 48, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: COLORS.primary, borderRadius: RADIUS.lg, backgroundColor: COLORS.surface },
+  pageButtonDisabled: { borderColor: COLORS.border, backgroundColor: COLORS.surfaceMuted },
+  pageButtonText: { ...TYPOGRAPHY.button, color: COLORS.primary },
+  pageButtonTextDisabled: { color: COLORS.textDisabled },
+  pageStatus: { flex: 1, minWidth: 0, ...TYPOGRAPHY.caption, lineHeight: 17, color: COLORS.textSecondary, textAlign: 'center' },
+  exportActions: { flexDirection: 'column', alignItems: 'stretch', gap: SPACING.sm, borderTopWidth: 1, borderTopColor: COLORS.divider, paddingTop: SPACING.lg },
+  exportAction: { width: '100%', flexGrow: 0, flexShrink: 0 },
   note: { ...TYPOGRAPHY.caption, color: COLORS.textMuted, textAlign: 'center' },
   pressed: { opacity: 0.72 },
 });
