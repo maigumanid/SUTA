@@ -150,7 +150,7 @@ export default function SanitationSection({
           </Text>
 
           <Text style={styles.introText}>
-            Record the household sanitation facility and how excreta or sewage is managed.
+            Record the sanitation facility at this place and how excreta or sewage is managed.
           </Text>
         </View>
       </View>
@@ -161,7 +161,7 @@ export default function SanitationSection({
         required
       >
         <Text style={styles.help}>
-          Select one classification that best describes the household toilet facility.
+          Select one classification that best describes the toilet facility at this place.
         </Text>
 
         <Text style={styles.subheading}>
@@ -275,7 +275,7 @@ export default function SanitationSection({
             required
           >
             <Text style={styles.question}>
-              Is the toilet shared with other households in a separate dwelling?
+              Is this toilet shared with users from another dwelling or place?
             </Text>
 
             <BinaryField
@@ -308,7 +308,7 @@ export default function SanitationSection({
             />
 
             <Text style={styles.help}>
-              This result is based on the sanitary toilet facility and whether it is shared with another household.
+              This result is based on the sanitary toilet facility and whether it is shared with another dwelling or place.
             </Text>
           </Section>
 

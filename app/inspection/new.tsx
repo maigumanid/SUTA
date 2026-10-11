@@ -23,7 +23,7 @@ import { getStoredInspectionById, type StoredInspection } from '@/storage/inspec
 import { getCachedInspectionById } from '@/storage/inspectionHistoryCache';
 import type { InspectionFinding } from '@/types/householdInspection';
 import { isSupportedPlaceType } from '@/types/place';
-import { formatPurok } from '@/utils/placeDisplay';
+import { formatPurok, getPlaceRepresentativeLabel } from '@/utils/placeDisplay';
 import {
   captureInspectionLocation,
   InspectionLocationResult,
@@ -353,11 +353,7 @@ export default function NewInspectionScreen() {
 
             <InfoRow
               icon="person-outline"
-              label={
-                isHousehold
-                  ? 'Household Head / Representative'
-                  : 'Owner / Representative'
-              }
+              label={getPlaceRepresentativeLabel(place.placeType)}
               value={place.representativeName}
             />
 
@@ -429,7 +425,7 @@ export default function NewInspectionScreen() {
 
             <ReminderItem
               icon="people-outline"
-              text="Coordinate with the household head, owner, or representative before inspection."
+              text="Coordinate with the place representative before inspection."
             />
 
             <ReminderItem

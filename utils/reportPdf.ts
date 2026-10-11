@@ -49,7 +49,7 @@ function photoAppendixHtml(report: ReportViewModel, records: EmbeddedInspectionR
         description,
       };
     }));
-    return `<article class="evidence-entry"><div class="evidence-heading"><h2>Row ${rowNumber} — ${escape(record.placeName)}</h2><p><strong>Household / Place:</strong> ${escape(record.placeName)} &nbsp; <strong>Inspection Date:</strong> ${escape(formatLocalDateTime(record.inspectionDate))}</p></div><div class="photos">${evidence.map(({ item, photoNumber: number, category, description }) => {
+    return `<article class="evidence-entry"><div class="evidence-heading"><h2>Row ${rowNumber} — ${escape(record.placeName)}</h2><p><strong>Place:</strong> ${escape(record.placeName)} &nbsp; <strong>Inspection Date:</strong> ${escape(formatLocalDateTime(record.inspectionDate))}</p></div><div class="photos">${evidence.map(({ item, photoNumber: number, category, description }) => {
       const caption = `<figcaption><strong>Photo ${number}</strong><span><strong>Category:</strong> ${escape(category)}</span><span><strong>Finding:</strong> ${escape(description)}</span></figcaption>`;
       return item.dataUri ? `<figure><img src="${item.dataUri}">${caption}</figure>` : `<figure class="unavailable"><div>Evidence image unavailable</div>${caption}</figure>`;
     }).join('')}</div></article>`;

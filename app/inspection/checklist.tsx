@@ -394,7 +394,7 @@ const isTourActive = tour === 'true';
 
                 <Text style={styles.introText}>
                   Complete the information observed or verified
-                  during the household visit.
+                  during the site visit.
                 </Text>
               </View>
             </View>
@@ -405,7 +405,7 @@ const isTourActive = tour === 'true';
               required
             >
               <Text style={styles.help}>
-                Select one water source used by the household.
+                Select the water source used at this place.
               </Text>
 
               <InspectionChoice

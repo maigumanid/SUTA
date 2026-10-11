@@ -92,7 +92,7 @@ export const validateWaterSection = (
 
   if (!water.waterSourceType) {
     errors.waterSource =
-      'Select the household water source.';
+      'Select the water source used at this place.';
   }
 
   if (
@@ -100,7 +100,7 @@ export const validateWaterSection = (
     !water.otherWaterSource.trim()
   ) {
     errors.otherWaterSource =
-      'Specify the household water source.';
+      'Specify the water source used at this place.';
   }
 
   if (water.locatedWithinPremises === undefined) {
@@ -163,7 +163,7 @@ export const validateSanitationSection = (
       sanitation.sharedWithOtherHouseholds === undefined
     ) {
       errors.shared =
-        'Indicate whether the toilet is shared with another household.';
+        'Indicate whether the toilet is shared with another dwelling or place.';
     }
 
     if (!sanitation.excretaDisposalMethod) {

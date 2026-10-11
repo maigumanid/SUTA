@@ -36,7 +36,7 @@ import {
 } from '@/services/inspectionSyncService';
 import { formatLocalDate, formatLocalDateTime } from '@/utils/dateTime';
 import { getInspectionTypeLabel } from '@/utils/inspectionDisplay';
-import { formatPurok } from '@/utils/placeDisplay';
+import { formatPurok, getPlaceRepresentativeLabel } from '@/utils/placeDisplay';
 import { getNetworkAvailability } from '@/utils/networkState';
 import { calculateInspectionRisk, getRiskClassification } from '@/utils/riskClassification';
 
@@ -527,7 +527,7 @@ export default function InspectionSummaryScreen() {
           <Text style={styles.infoText}>
             {isTourActive
               ? 'Final step of the guided tour. Review the inspection information below, then confirm and save the inspection.'
-              : 'Review the household inspection information below. You can return to the checklist if something needs to be corrected.'}
+              : 'Review the inspection information below. You can return to the checklist if something needs to be corrected.'}
           </Text>
         </View>
 
@@ -550,7 +550,7 @@ export default function InspectionSummaryScreen() {
 
           {place ? (
             <>
-              <ReviewRow label="Household Representative" value={place.representativeName} />
+              <ReviewRow label={getPlaceRepresentativeLabel(place.placeType)} value={place.representativeName} />
               <ReviewRow label="Location" value={`${formatPurok(place.purok)} · ${place.barangay ?? profile?.assignedBarangay ?? 'Assigned barangay'}`} />
               <ReviewRow label="Address" value={place.address} />
             </>
@@ -639,7 +639,7 @@ export default function InspectionSummaryScreen() {
           {sanitation.sanitaryFacilityType && (
             <>
               <ReviewRow
-                label="Shared with Other Households"
+                label="Shared Facility"
                 value={binaryYesNo(
                   sanitation
                     .sharedWithOtherHouseholds

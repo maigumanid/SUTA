@@ -155,7 +155,7 @@ export default function AdminInspectionDetailScreen() {
       </Section>
       <Section title="Checklist — Sanitation Facility">
         <DetailRow label="Toilet Facility" value={sanitaryFacility ? readable(sanitaryFacility) : unsanitaryFacility === undefined ? 'Not recorded' : ['Without toilet', 'Open pit latrine', 'Overhung latrine', 'Water sealed connected to open drain'][unsanitaryFacility] ?? 'Unsanitary facility'} />
-        <DetailRow label="Shared With Other Households" value={binary(numberValue(sanitation, 'sharedWithOtherHouseholds'))} />
+        <DetailRow label="Shared Facility" value={binary(numberValue(sanitation, 'sharedWithOtherHouseholds'))} />
         <DetailRow label="Disposal Method" value={textValue(sanitation, 'excretaDisposalMethod') ? readable(textValue(sanitation, 'excretaDisposalMethod') ?? '') : 'Not recorded'} />
       </Section>
       <Text style={styles.section}>Findings</Text>

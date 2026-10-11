@@ -54,7 +54,7 @@ import {
 } from '@/utils/inspectionDisplay';
 import { getRiskClassification } from '@/utils/riskClassification';
 import { isReinspectionOverdue } from '@/utils/reinspection';
-import { formatPurok } from '@/utils/placeDisplay';
+import { formatPurok, getPlaceRepresentativeLabel } from '@/utils/placeDisplay';
 import { shareComplianceNoticePdf } from '@/utils/complianceNoticePdf';
 import { isSupportedPlaceType } from '@/types/place';
 
@@ -106,7 +106,7 @@ export default function PlaceDetailsScreen() {
     {
       title: 'Place Information',
       description:
-        'Review the household head or representative, purok, address, and place type before starting an inspection.',
+        'Review the representative, purok, address, and place type before starting an inspection.',
       ref: informationRef,
       y: informationY,
     },
@@ -486,7 +486,7 @@ export default function PlaceDetailsScreen() {
           </View>
 
           <View ref={informationRef} collapsable={false} style={styles.placeFacts} onLayout={(event) => { informationY.current = event.nativeEvent.layout.y; }}>
-            <PlaceFact label={isHousehold ? 'Household Representative' : 'Owner / Representative'} value={place.representativeName || 'Not recorded'} />
+            <PlaceFact label={getPlaceRepresentativeLabel(place.placeType)} value={place.representativeName || 'Not recorded'} />
             <PlaceFact label="Purok" value={formatPurok(place.purok)} />
             <PlaceFact label="Address" value={place.address} />
             {place.contactNumber ? <PlaceFact label="Contact" value={place.contactNumber} /> : null}
@@ -497,7 +497,7 @@ export default function PlaceDetailsScreen() {
         {place.profileStatus === 'starter' ? (
           <View style={styles.completionCard}>
             <View style={styles.completionIcon}><Ionicons name="create-outline" size={24} color={COLORS.warningDark} /></View>
-            <View style={styles.completionCopy}><Text style={styles.completionTitle}>Imported record needs completion</Text><Text style={styles.completionText}>Confirm the household representative and purok during field preparation.</Text></View>
+            <View style={styles.completionCopy}><Text style={styles.completionTitle}>Imported record needs completion</Text><Text style={styles.completionText}>Confirm the representative and purok during field preparation.</Text></View>
             <Pressable accessibilityRole="button" onPress={() => router.push(`/place/edit/${place.id}` as Href)} style={({ pressed }) => [styles.completionAction, pressed && styles.pressed]}><Text style={styles.completionActionText}>Complete</Text><Ionicons name="arrow-forward" size={17} color={COLORS.warningDark} /></Pressable>
           </View>
         ) : null}

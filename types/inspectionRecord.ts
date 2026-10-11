@@ -19,7 +19,7 @@ export const INSPECTION_RECORD_CHECKLIST_DEFINITIONS: readonly {
   { key: 'arsenic_result', label: 'Arsenic test result', shortLabel: 'Arsenic Result', group: 'Safe Water Supply' },
   { key: 'smdws', label: 'Safely Managed Drinking Water Service', shortLabel: 'SMDWS', group: 'Safe Water Supply' },
   { key: 'facility_type', label: 'Toilet / sanitation facility type', shortLabel: 'Toilet Type', group: 'Sanitation Facility' },
-  { key: 'shared_toilet', label: 'Shared with other households', shortLabel: 'Shared Toilet', group: 'Sanitation Facility' },
+  { key: 'shared_toilet', label: 'Shared facility', shortLabel: 'Shared Toilet', group: 'Sanitation Facility' },
   { key: 'bsf', label: 'Basic Sanitation Facility', shortLabel: 'BSF', group: 'Sanitation Facility' },
   { key: 'disposal_method', label: 'Excreta disposal / treatment method', shortLabel: 'Disposal', group: 'Sanitation Facility' },
   { key: 'smss', label: 'Safely Managed Sanitation Service', shortLabel: 'SMSS', group: 'Sanitation Facility' },

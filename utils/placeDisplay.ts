@@ -6,3 +6,9 @@ export function formatPurok(value?: string | null) {
 
   return `Purok ${normalized}`;
 }
+
+export function getPlaceRepresentativeLabel(placeType?: string | null) {
+  return placeType === 'Household / Residence'
+    ? 'Household Representative'
+    : 'Representative';
+}

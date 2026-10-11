@@ -666,7 +666,7 @@ export default function ViolationsScreen() {
             Remarks
           </Text>
           <Text style={styles.helpText}>
-            Add any other relevant observations from the household visit. This is optional.
+            Add any other relevant observations from the site visit. This is optional.
           </Text>
           <TextInput
             value={remarks}

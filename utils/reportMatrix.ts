@@ -61,8 +61,8 @@ function identityColumns(report: ReportViewModel): WideReportColumn[] {
   if (report.layoutKind === 'place_history') {
     return [
       { label: 'No.', group: 'Identity / Location', className: 'number' },
-      { label: 'Household / Place', group: 'Identity / Location', className: 'identity' },
-      { label: 'Household Representative', group: 'Identity / Location', className: 'identity' },
+      { label: 'Place', group: 'Identity / Location', className: 'identity' },
+      { label: 'Representative', group: 'Identity / Location', className: 'identity' },
       { label: 'Purok', group: 'Identity / Location', className: 'compact' },
       { label: 'Address', group: 'Identity / Location', className: 'identity' },
       { label: 'Inspection Date', group: 'Inspection', className: 'date' },
@@ -76,8 +76,8 @@ function identityColumns(report: ReportViewModel): WideReportColumn[] {
   const includeInspector = report.generatedBy === 'admin' && !hasSingleAdminScope(report, 'Inspector');
   return [
     { label: 'No.', group: 'Identity / Location', className: 'number' },
-    { label: 'Household / Place', group: 'Identity / Location', className: 'identity' },
-    { label: 'Household Representative', group: 'Identity / Location', className: 'identity' },
+    { label: 'Place', group: 'Identity / Location', className: 'identity' },
+    { label: 'Representative', group: 'Identity / Location', className: 'identity' },
     { label: 'Purok', group: 'Identity / Location', className: 'compact' },
     { label: 'Address', group: 'Identity / Location', className: 'identity' },
     ...(includeBarangay ? [{ label: 'Barangay', group: 'Identity / Location' as const, className: 'identity' as const }] : []),

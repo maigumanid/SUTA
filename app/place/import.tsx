@@ -4,6 +4,7 @@ import { File } from 'expo-file-system';
 import { type Href, router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import OptionSelector from '@/components/admin/OptionSelector';
 import AppButton from '@/components/common/AppButton';
@@ -29,6 +30,7 @@ const MAX_ROWS = 500;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 
 export default function PlaceImportScreen() {
+  const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const { isOnline } = useNetwork();
   const { places, refreshPlaces } = usePlaces();
@@ -139,7 +141,13 @@ export default function PlaceImportScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: Math.max(SPACING.section, insets.bottom + SPACING.xxl) },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.header}>
           <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => step === 'select' ? router.back() : setStep(step === 'review' ? 'map' : 'select')} style={styles.back}>
             <Ionicons name="arrow-back" size={22} color={COLORS.text} />
@@ -252,8 +260,10 @@ export default function PlaceImportScreen() {
               <LedgerRow label="Invalid rows skipped" value={result.invalid} />
               <LedgerRow label="Potential duplicates skipped" value={result.duplicates} />
             </View>
-            <AppButton title="Open Field Plan" onPress={() => router.replace('/field-planning' as Href)} style={styles.primaryAction} />
-            <AppButton title="View all places" variant="outline" onPress={() => router.replace('/(tabs)/establishments')} />
+            <View style={styles.resultActions}>
+              <AppButton title="Open Field Plan" onPress={() => router.replace('/field-planning' as Href)} />
+              <AppButton title="View all places" variant="outline" onPress={() => router.replace('/(tabs)/establishments')} />
+            </View>
           </EntranceTransition>
         ) : null}
       </ScrollView>
@@ -319,5 +329,6 @@ const styles = StyleSheet.create({
   emptyText: { ...TYPOGRAPHY.bodySmall, color: COLORS.textMuted, textAlign: 'center', padding: SPACING.xl }, offlineText: { ...TYPOGRAPHY.caption, color: COLORS.offline, textAlign: 'center', marginTop: SPACING.sm },
   resultHero: { alignItems: 'center', paddingVertical: SPACING.xxl }, successMark: { width: 68, height: 68, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.compliant, marginBottom: SPACING.lg, transform: [{ rotate: '-4deg' }] },
   resultLedger: { paddingHorizontal: SPACING.lg, borderRadius: RADIUS.xl, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border }, ledgerRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: COLORS.divider }, ledgerValue: { ...TYPOGRAPHY.subheading, color: COLORS.text },
+  resultActions: { gap: SPACING.md, marginTop: SPACING.xxl, paddingHorizontal: SPACING.xs, paddingBottom: SPACING.md },
 });
 
