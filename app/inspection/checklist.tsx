@@ -41,6 +41,7 @@ import {
   HouseholdInspection,
   WaterSourceType,
 } from '@/types/householdInspection';
+import { isSupportedPlaceType } from '@/types/place';
 
 import {
   InspectionErrors,
@@ -305,7 +306,7 @@ const isTourActive = tour === 'true';
 
   if (
     !place ||
-    place.placeType !== 'Household / Residence'
+    !isSupportedPlaceType(place.placeType)
   ) {
     return (
       <View style={styles.invalidContainer}>
@@ -316,11 +317,11 @@ const isTourActive = tour === 'true';
         />
 
         <Text style={styles.headerTitle}>
-          Household inspection unavailable
+          Sanitary inspection unavailable
         </Text>
 
         <Text style={styles.invalidText}>
-          Select a valid household record before opening this checklist.
+          Select a valid registered place before opening this checklist.
         </Text>
 
         <AppButton
@@ -353,7 +354,7 @@ const isTourActive = tour === 'true';
 
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>
-            Household Inspection
+            Sanitary Inspection
           </Text>
 
           <Text style={styles.headerSubtitle}>

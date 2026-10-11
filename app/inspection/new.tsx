@@ -22,6 +22,7 @@ import { fetchStoredInspectionById } from '@/services/inspectionHistoryService';
 import { getStoredInspectionById, type StoredInspection } from '@/storage/inspectionStorage';
 import { getCachedInspectionById } from '@/storage/inspectionHistoryCache';
 import type { InspectionFinding } from '@/types/householdInspection';
+import { isSupportedPlaceType } from '@/types/place';
 import { formatPurok } from '@/utils/placeDisplay';
 import {
   captureInspectionLocation,
@@ -165,6 +166,7 @@ export default function NewInspectionScreen() {
 
   const isHousehold =
     place.placeType === 'Household / Residence';
+  const isInspectablePlace = isSupportedPlaceType(place.placeType);
   const linkedFindings: InspectionFinding[] = correctiveSource?.findings.map((finding) => ({
     id: `followup_${correctiveSource.id}_${finding.id}`,
     category: finding.category,
@@ -451,21 +453,21 @@ export default function NewInspectionScreen() {
           <AppButton
             title="Continue to Checklist"
             onPress={() => openChecklist(capturedLocation)}
-            disabled={!isHousehold || loadingCorrectiveSource || Boolean(correctiveSourceError)}
+            disabled={!isInspectablePlace || loadingCorrectiveSource || Boolean(correctiveSourceError)}
           />
         ) : locationFailure ? (
           <View style={styles.locationActions}>
             <AppButton
               title="Retry Location"
               onPress={captureCurrentLocation}
-              disabled={!isHousehold}
+              disabled={!isInspectablePlace}
               loading={isCapturingLocation}
             />
             <AppButton
               title="Continue Without Location"
               variant="outline"
               onPress={() => openChecklist(locationFailure)}
-              disabled={!isHousehold || loadingCorrectiveSource || Boolean(correctiveSourceError)}
+              disabled={!isInspectablePlace || loadingCorrectiveSource || Boolean(correctiveSourceError)}
             />
             {shouldOpenLocationSettings && (
               <AppButton
@@ -481,7 +483,7 @@ export default function NewInspectionScreen() {
           <AppButton
             title="Capture Current Location"
             onPress={captureCurrentLocation}
-            disabled={!isHousehold || loadingCorrectiveSource || Boolean(correctiveSourceError)}
+            disabled={!isInspectablePlace || loadingCorrectiveSource || Boolean(correctiveSourceError)}
             loading={isCapturingLocation}
           />
         )}
@@ -490,9 +492,9 @@ export default function NewInspectionScreen() {
         {correctiveSourceError ? <View style={styles.locationFailure}><Ionicons name="alert-circle-outline" size={20} color={COLORS.violation} /><Text style={styles.locationFailureText}>{correctiveSourceError}</Text></View> : null}
         {correctiveSource && correctiveSource.findings.length === 0 ? <Text style={styles.developmentNote}>The linked original inspection contains no findings to verify.</Text> : null}
 
-        {!isHousehold && (
+        {!isInspectablePlace && (
           <Text style={styles.developmentNote}>
-            The official inspection form for this place type is not yet available. Select a household to use the current checklist.
+            This record has an unsupported place type. Update the place profile before continuing.
           </Text>
         )}
 

@@ -56,6 +56,7 @@ import { getRiskClassification } from '@/utils/riskClassification';
 import { isReinspectionOverdue } from '@/utils/reinspection';
 import { formatPurok } from '@/utils/placeDisplay';
 import { shareComplianceNoticePdf } from '@/utils/complianceNoticePdf';
+import { isSupportedPlaceType } from '@/types/place';
 
 export default function PlaceDetailsScreen() {
   const { getPlaceById, isLoading } = usePlaces();
@@ -365,6 +366,7 @@ export default function PlaceDetailsScreen() {
 
   const isHousehold =
     place.placeType === 'Household / Residence';
+  const isInspectablePlace = isSupportedPlaceType(place.placeType);
   const riskClassification = getRiskClassification(place.riskLevel);
   const fullHistory = inspectionHistory.filter(
     (record): record is StoredInspection => 'findings' in record
@@ -519,12 +521,12 @@ export default function PlaceDetailsScreen() {
                     params: { placeId: place.id },
                   });
                 }}
-                disabled={!isHousehold}
+                disabled={!isInspectablePlace}
               />
 
-              {!isHousehold && (
+              {!isInspectablePlace && (
                 <Text style={styles.developmentNote}>
-                  The official inspection form for this place type is not yet available. Household inspection data will not be used for it.
+                  This record has an unsupported place type. Update the place profile before starting an inspection.
                 </Text>
               )}
             </View>

@@ -10,6 +10,10 @@ export const PLACE_TYPES = [
 
 export type PlaceType = (typeof PLACE_TYPES)[number];
 
+export function isSupportedPlaceType(value: unknown): value is PlaceType {
+  return typeof value === 'string' && PLACE_TYPES.some((placeType) => placeType === value);
+}
+
 export type InspectionStatus =
   | 'Compliant'
   | 'Non-Compliant'
